@@ -11,10 +11,6 @@ on: #Triggers
 
 jobs: #definitions
   build:
-    uses: ./.github/workflows/apigee-proxy-deploy.yaml
-    with:
-      input_key: value
-    secrets: inherit  
     name: "Deploy To Dev"
     runs-on: ubuntu-latest
     permissions:
