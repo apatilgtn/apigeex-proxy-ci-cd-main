@@ -1,5 +1,5 @@
 
-name: proxy-ci
+name: proxy-deploy
 
 on: #Triggers
   push:
