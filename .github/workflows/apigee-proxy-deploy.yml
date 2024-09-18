@@ -17,7 +17,7 @@ jobs: #definitions
       contents: 'read'
       id-token: 'write'
     steps:
-      - name: Checkout      #Checkout the Repository
+      - name: Checkout   #Checkout the Repository
         uses: actions/checkout@v4
 
     # Install gcloud, `setup-gcloud` automatically picks up authentication from `auth`.
