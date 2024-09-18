@@ -29,9 +29,9 @@ jobs: #definitions
           activate_credentials_file: true
           project_id: 'vital-scout-430808-k8'
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-          //workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
-          //service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
+          workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
+          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
+          //workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
           //service_account: ${{ secrets.SERVICE_ACCOUNT }}
       - name: Set up Cloud SDK         #Set Up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v0.3.0
