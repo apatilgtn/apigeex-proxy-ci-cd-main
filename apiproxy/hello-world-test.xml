@@ -18,7 +18,7 @@
     <DisplayName></DisplayName>
     <Description></Description>
     <CreatedAt>1642755207215</CreatedAt>
-    <LastModifiedAt>1642755207215</LastModifiedAt>
+    <LastModifiedAt>16426755207215</LastModifiedAt>
     <BasePaths>/hello-world</BasePaths>
     <ProxyEndpoints>
         <ProxyEndpoint>default</ProxyEndpoint>
