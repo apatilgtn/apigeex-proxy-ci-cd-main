@@ -13,36 +13,17 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Set up Go
-      uses: actions/setup-go@v2
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v0.2.0
       with:
-        go-version: 1.22
+        project_id: ${{ secrets.GCP_CREDENTIALS }}
+        service_account_key: 'vital-scout-430808-k8'
 
     - name: Install apigeecli
       run: |
-           LATEST_RELEASE=$(curl -s https://api.github.com/repos/apigee/apigeecli/releases/latest | jq -r .tag_name)
-           if [ -z "$LATEST_RELEASE" ]; then
-           echo "Failed to get latest release version"
-           exit 1
-           fi
-           echo "Latest release: $LATEST_RELEASE"
-    
-           DOWNLOAD_URL="https://github.com/apigee/apigeecli/releases/download/${LATEST_RELEASE}/apigeecli-linux-amd64"
-           echo "Downloading from: $DOWNLOAD_URL"
-    
-           if curl -L -o apigeecli "$DOWNLOAD_URL"; then
-           chmod +x apigeecli
-           sudo mv apigeecli /usr/local/bin/
-           if apigeecli version; then
-           echo "apigeecli installed successfully"
-           else
-           echo "apigeecli installation failed"
-           exit 1
-           fi
-           else
-           echo "Failed to download apigeecli"
-           exit 1
-           fi
+        curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
+        sudo mv apigeecli /usr/local/bin/
+        apigeecli version
     
     - name: Set up gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
