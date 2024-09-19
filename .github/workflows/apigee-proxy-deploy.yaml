@@ -19,16 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4  # Checkout the repository code
 
-      # Use pre-built `setup-gcloud` action for authentication
-      - uses: google-github-actions/auth@v2
+      - name: 'Auth'
+        uses: 'google-github-actions/auth@v2'
         with:
-          token_format: access_token
-          create_credentials_file: true
-          activate_credentials_file: true
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'  # Properly formatted service account email
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/setup-gcloud@v1  # Set up Google Cloud SDK
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Use gcloud CLI'
+        run: 'gcloud info'
 
       - name: Create API bundle
         run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
@@ -36,9 +37,9 @@ jobs:
       - name: Upload API Proxy Bundle
         id: upload
         env:
-          ACCESS_TOKEN: $(gcloud auth print-access-token)
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |  # Multi-line command with output capture
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
           response=$(curl -v --fail -X POST \
             -H "Content-Type: multipart/form-data" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -48,10 +49,13 @@ jobs:
 
           echo "APIgee Response: $response"
           revision=$(echo "$response" | jq --raw-output .revision)
-          echo "::set-output name=apigee-revision::$revision"
+          echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
       - name: Deploy Revision  # Deploy the uploaded revision to dev environment
-        run: |  # Multi-line command with access token reference
+        env:
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
           curl --fail -X POST \
-            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/hello-world-test/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/dev/apis/hello-world-test/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
