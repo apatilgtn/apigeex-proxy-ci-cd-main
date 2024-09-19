@@ -22,7 +22,7 @@ jobs:
       - name: 'Auth'
         uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          //credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
           workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
 
