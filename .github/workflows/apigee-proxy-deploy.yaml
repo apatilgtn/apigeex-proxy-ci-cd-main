@@ -1,69 +1,52 @@
-name: proxy-ci  # Descriptive workflow name
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: proxy-ci
 
 on:
   push:
-    branches: [ main ]  # Only trigger on pushes to the main branch
+    branches:
+      - 'main'
     paths:
-      - '.github/workflows/apigee-proxy-deploy.yaml'  # Trigger if workflow file changes
-      - 'src/**'  # Trigger if any files in src directory change
+      - '.github/workflows/ci.yaml'
+      - 'src/**'
 
 jobs:
-  build:  # Job name
-    name: "Deploy To Dev"  # Descriptive job name
-    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
-
+  build:
+    name: "Deploy To Dev"
+    runs-on: ubuntu-latest
     permissions:
-      contents: read  # Read access to repository content
-      id-token: write  # Write access to identify the user
-
+      contents: 'read'
+      id-token: 'write'
     steps:
-      - uses: actions/checkout@v4  # Checkout the repository code
-
-      - name: 'Auth'
-        uses: 'google-github-actions/auth@v2'
+      - name: Checkout
+        uses: actions/checkout@v2
+      - id: auth
+        uses: google-github-actions/auth@v0.4.0
         with:
           token_format: "access_token"
-          project_id: 'vital-scout-430808-k8'
-          workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
-          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
-
-      - name: Set up Google Cloud CLI
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-           export_default_credentials: true
-
-      - name: Get access token
-        run: |
-             gcloud auth print-access-token
-
-      - name: 'Use gcloud CLI'
-        run: 'gcloud info'
-
+          create_credentials_file: true
+          activate_credentials_file: true
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v0.3.0
       - name: Create API bundle
-        run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
-
+        run: zip -r proxy.zip apiproxy
       - name: Upload API Proxy Bundle
         id: upload
-        env:
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          response=$(curl -v --fail -X POST \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -F "file=@proxy.zip" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=hello-world" \
-            --silent)
-
-          echo "APIgee Response: $response"
-          revision=$(echo "$response" | jq --raw-output .revision)
-          echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
-
-      - name: Deploy Revision  # Deploy the uploaded revision to dev environment
-        env:
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          curl --fail -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/dev/apis/hello-world-test/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+        run: "echo \"::set-output name=apigee-revision::$(curl --fail -X POST -H \"Content-Type: multipart/form-data\" -H \"Authorization: Bearer ${{steps.auth.outputs.access_token}}\" -F \"file=@proxy.zip\" \"https://apigee.googleapis.com/v1/organizations/${{secrets.APIGEE_ORG}}/apis?action=import&name=hello-world\" --silent | jq --raw-output .revision)\""
+      - name: Deploy Revision
+        run: "curl --fail -X POST -H \"Authorization: Bearer ${{steps.auth.outputs.access_token}}\" \"https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/eval/apis/hello-world/revisions/${{steps.upload.outputs.apigee-revision}}/deployments?override=true\""
+  
