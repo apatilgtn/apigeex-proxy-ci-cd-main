@@ -41,7 +41,7 @@ jobs:
     - name: Set up and authenticate gcloud CLI
       uses: google-github-actions/auth@v1
       with:
-        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+       // workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
         service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
 
     - name: Install gcloud SDK
