@@ -36,7 +36,7 @@ jobs:
       - name: Upload API Proxy Bundle
         id: upload
         env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          ACCESS_TOKEN: $(gcloud auth print-access-token)
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
         run: |  # Multi-line command with output capture
           response=$(curl -v --fail -X POST \
