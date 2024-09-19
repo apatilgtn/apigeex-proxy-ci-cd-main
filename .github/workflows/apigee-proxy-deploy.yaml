@@ -34,23 +34,22 @@ jobs:
       - name: Create API bundle
         run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
 
+      - name: Install apigeecli
+        run: |
+             curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
+             sudo mv apigeecli /usr/local/bin/apigeecli
+
       - name: Upload API Proxy Bundle
         id: upload
         env:
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          response=$(curl -v --fail -X POST \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -F "file=@proxy.zip" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=hello-world" \
-            --silent)
-
-          echo "APIgee Response: $response"
-          revision=$(echo "$response" | jq --raw-output .revision)
-          echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
-
+         APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+         run: |
+              ACCESS_TOKEN=$(gcloud auth print-access-token)
+              response=$(apigeecli apis create bundle -f proxy.zip -n hello-world -o $APIGEE_ORG -t $ACCESS_TOKEN)
+              echo "APIgee Response: $response"
+              revision=$(echo "$response" | jq --raw-output .revision)
+              echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
+    
       - name: Deploy Revision  # Deploy the uploaded revision to dev environment
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
