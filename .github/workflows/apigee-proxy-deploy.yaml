@@ -30,7 +30,6 @@ jobs:
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v1
         with:
-           project_id: 'vital-scout-430808-k8'
            export_default_credentials: true
 
       - name: Get access token
