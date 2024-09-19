@@ -39,6 +39,8 @@ jobs:
       with:
         service_account_key: ${{ secrets.GCP_CREDENTIALS }}
         project_id: 'vital-scout-430808-k8'
+        service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
+
 
     - name: Authenticate gcloud
       run: |
