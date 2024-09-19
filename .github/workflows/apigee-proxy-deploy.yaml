@@ -44,8 +44,8 @@ jobs:
 
     - name: Authenticate gcloud
       run: |
-        gcloud auth activate-service-account github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com
-        gcloud auth activate-service-account --key-file=<(echo '${{ secrets.GCP_CREDENTIALS }}' | base64 --decode)
+        
+        gcloud auth activate-service-account github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com --key-file=<(echo '${{ secrets.GCP_CREDENTIALS }}' | base64 --decode)
 
     - name: Get Access Token
       id: get_token
