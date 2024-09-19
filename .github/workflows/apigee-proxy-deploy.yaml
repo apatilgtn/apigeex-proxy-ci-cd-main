@@ -18,6 +18,11 @@ jobs:
       with:
         go-version: 1.17
 
+    - name: Download apigeecli install script
+      run: |
+           curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh -o downloadLatest.sh
+            chmod +x downloadLatest.sh
+
     - name: Install apigeecli
       run: |
         curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
