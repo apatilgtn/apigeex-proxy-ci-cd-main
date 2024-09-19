@@ -39,7 +39,7 @@ jobs:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
         run: |  # Multi-line command with output capture
-          response=$(curl --fail -X POST \
+          response=$(curl -v --fail -X POST \
             -H "Content-Type: multipart/form-data" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -F "file=@proxy.zip" \
