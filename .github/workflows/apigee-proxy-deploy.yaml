@@ -20,13 +20,31 @@ jobs:
 
     - name: Install apigeecli
       run: |
-           LATEST_RELEASE=$(curl -s https://api.github.com/repos/apigee/apigeecli/releases/latest | grep "tag_name" | cut -d '"' -f 4)
-           curl -L "https://github.com/apigee/apigeecli/releases/download/${LATEST_RELEASE}/apigeecli-linux-amd64" -o apigeecli
-           chmod +x apigeecli
-           sudo mv apigeecli /usr/local/bin/
-           apigeecli version
+           LATEST_RELEASE=$(curl -s https://api.github.com/repos/apigee/apigeecli/releases/latest | jq -r .tag_name)
+           if [ -z "$LATEST_RELEASE" ]; then
+           echo "Failed to get latest release version"
+           exit 1
+           fi
+    echo "Latest release: $LATEST_RELEASE"
     
-    - name: Set up gcloud CLI
+           DOWNLOAD_URL="https://github.com/apigee/apigeecli/releases/download/${LATEST_RELEASE}/apigeecli-linux-amd64"
+    echo "Downloading from: $DOWNLOAD_URL"
+    
+          if curl -L -o apigeecli "$DOWNLOAD_URL"; then
+      chmod +x apigeecli
+      sudo mv apigeecli /usr/local/bin/
+      if apigeecli version; then
+        echo "apigeecli installed successfully"
+      else
+        echo "apigeecli installation failed"
+        exit 1
+      fi
+         else
+      echo "Failed to download apigeecli"
+      exit 1
+     fi
+    
+     - name: Set up gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
       with:
         service_account_key: ${{ secrets.GCP_CREDENTIALS }}
