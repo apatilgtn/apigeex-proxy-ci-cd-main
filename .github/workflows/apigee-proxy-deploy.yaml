@@ -20,8 +20,9 @@ jobs:
 
     - name: Install apigeecli
       run: |
-        go install github.com/apigee/apigeecli@latest
-        echo "${HOME}/go/bin" >> $GITHUB_PATH
+        curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
+        sudo mv apigeecli /usr/local/bin/
+        apigeecli version
 
     - name: Set up gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
