@@ -18,16 +18,11 @@ jobs:
       with:
         go-version: 1.17
 
-    - name: Download apigeecli install script
+    - name: Build and install apigeecli
       run: |
-           curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh -o downloadLatest.sh
-            chmod +x downloadLatest.sh
-
-    - name: Install apigeecli
-      run: |
-           LATEST_RELEASE=$(curl -s https://api.github.com/repos/apigee/apigeecli/releases/latest | jq -r .tag_name)
-           curl -L https://github.com/apigee/apigeecli/releases/download/${LATEST_RELEASE}/apigeecli-linux-amd64.zip -o apigeecli.zip
-           unzip apigeecli.zip
+           git clone https://github.com/apigee/apigeecli.git
+           cd apigeecli
+           go build -o apigeecli
            sudo mv apigeecli /usr/local/bin/
            apigeecli version
     
