@@ -17,12 +17,27 @@ jobs:
       uses: google-github-actions/setup-gcloud@v0.2.0
 
 
-    - name: Install apigeecli
+    - name: Set up apigeecli environment
       run: |
-        curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
-        sudo mv apigeecli /usr/local/bin/
+        # Create directory for apigeecli binary
+        mkdir -p $HOME/.apigeecli/bin
+        
+        # Download the latest version of apigeecli
+        curl -L https://github.com/apigee/apigeecli/releases/download/v2.4.2/apigeecli_v2.4.2_Linux_x86_64.zip -o apigeecli.zip
+        
+        # Unzip the downloaded file
+        unzip apigeecli.zip -d $HOME/.apigeecli/
+        
+        # Move the binary to the bin folder
+        mv $HOME/.apigeecli/apigeecli_v2.4.2_Linux_x86_64/apigeecli $HOME/.apigeecli/bin/
+        
+        # Add apigeecli to PATH
+        echo 'export PATH=$HOME/.apigeecli/bin:$PATH' >> $GITHUB_ENV
+
+    - name: Verify apigeecli installation
+      run: |
         apigeecli version
-    
+        
     - name: Set up gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
       with:
