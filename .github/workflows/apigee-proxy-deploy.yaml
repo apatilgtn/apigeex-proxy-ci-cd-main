@@ -1,87 +1,61 @@
-name: Deploy Apigee Proxy
+name: proxy-ci  # Descriptive workflow name
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-permissions:
-  id-token: write
-  contents: read
+    branches: [ main ]  # Only trigger on pushes to the main branch
+    paths:
+      - '.github/workflows/apigee-proxy-deploy.yaml'  # Trigger if workflow file changes
+      - 'src/**'  # Trigger if any files in src directory change
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+  build:  # Job name
+    name: "Deploy To Dev"  # Descriptive job name
+    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
+
+    permissions:
+      contents: read  # Read access to repository content
+      id-token: write  # Write access to identify the user
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v4  # Checkout the repository code
 
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v0.2.0
+      - name: 'Auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
 
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
 
-    - name: Set up apigeecli environment
-      run: |
-        # Create directory for apigeecli binary
-        mkdir -p $HOME/.apigeecli/bin
-        
-        # Download the latest version of apigeecli
-        curl -L https://github.com/apigee/apigeecli/releases/download/v2.4.2/apigeecli_v2.4.2_Linux_x86_64.zip -o apigeecli.zip
-        
-        # Unzip the downloaded file
-        unzip apigeecli.zip -d $HOME/.apigeecli/
-        
-        # Move the binary to the bin folder
-        mv $HOME/.apigeecli/apigeecli_v2.4.2_Linux_x86_64/apigeecli $HOME/.apigeecli/bin/
-        
-        # Add apigeecli to PATH
-        echo 'export PATH=$HOME/.apigeecli/bin:$PATH' >> $GITHUB_ENV
-        
-    - name: Set up and authenticate gcloud CLI
-      uses: google-github-actions/auth@v1
-      with:
-        workload_identity_provider: '//iam.googleapis.com/projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
-        service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
+      - name: 'Use gcloud CLI'
+        run: 'gcloud info'
 
-    - name: Install gcloud SDK
-      uses: google-github-actions/setup-gcloud@v1
-      with:
-        project_id: 'vital-scout-430808-k8'
-        export_default_credentials: true
+      - name: Create API bundle
+        run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
 
-    - name: Get Access Token
-      id: get_token
-      run: |
-        ACCESS_TOKEN=$(gcloud auth print-access-token)
-        echo "token=${ACCESS_TOKEN}" >> $GITHUB_ENV
+      - name: Upload API Proxy Bundle
+        id: upload
+        env:
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          response=$(curl -v --fail -X POST \
+            -H "Content-Type: multipart/form-data" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -F "file=@proxy.zip" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=hello-world" \
+            --silent)
 
-    - name: Use Access Token
-      run: |
-        echo "Access token is: ${{ env.token }}"
+          echo "APIgee Response: $response"
+          revision=$(echo "$response" | jq --raw-output .revision)
+          echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
-    - name: Create API Proxy Bundle
-      run: zip -r apiproxy.zip apiproxy
-
-    - name: Deploy API Proxy
-      env:
-        APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
-        PROXY_NAME: ${{ secrets.PROXY_NAME }}
-      run: |
-        apigeecli apis create bundle -f apiproxy.zip -n $PROXY_NAME -o $APIGEE_ORG -t ${{ steps.get_token.outputs.token }}
-        LATEST_REVISION=$(apigeecli apis list revisions -n $PROXY_NAME -o $APIGEE_ORG -t ${{ steps.get_token.outputs.token }} | jq -r '.[]' | sort -n | tail -1)
-        apigeecli apis deploy -n $PROXY_NAME -o $APIGEE_ORG -e $APIGEE_ENV -r $LATEST_REVISION -t ${{ steps.get_token.outputs.token }}
-
-    - name: Verify Deployment
-      env:
-        APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
-        PROXY_NAME: ${{ secrets.PROXY_NAME }}
-      run: |
-        DEPLOYMENT_STATUS=$(apigeecli apis getdeployment -n $PROXY_NAME -o $APIGEE_ORG -e $APIGEE_ENV -t ${{ steps.get_token.outputs.token }} | jq -r '.state')
-        if [ "$DEPLOYMENT_STATUS" != "deployed" ]; then
-          echo "Deployment failed. Status: $DEPLOYMENT_STATUS"
-          exit 1
-        fi
-        echo "Deployment successful!"
+      - name: Deploy Revision  # Deploy the uploaded revision to dev environment
+        env:
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          curl --fail -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/dev/apis/hello-world-test/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
