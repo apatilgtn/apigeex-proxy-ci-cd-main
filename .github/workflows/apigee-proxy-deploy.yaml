@@ -25,10 +25,12 @@ jobs:
 
     - name: Install apigeecli
       run: |
-        curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
-        sudo mv apigeecli /usr/local/bin/
-        apigeecli version
-
+           LATEST_RELEASE=$(curl -s https://api.github.com/repos/apigee/apigeecli/releases/latest | jq -r .tag_name)
+           curl -L https://github.com/apigee/apigeecli/releases/download/${LATEST_RELEASE}/apigeecli-linux-amd64.zip -o apigeecli.zip
+           unzip apigeecli.zip
+           sudo mv apigeecli /usr/local/bin/
+           apigeecli version
+    
     - name: Set up gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
       with:
