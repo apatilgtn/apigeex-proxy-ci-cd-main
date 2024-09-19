@@ -38,8 +38,8 @@ jobs:
           token_format: "access_token"
           create_credentials_file: true
           activate_credentials_file: true
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
-          //service_account: ${{ secrets.SERVICE_ACCOUNT }}
+          //workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v0.3.0
       - name: Create API bundle
