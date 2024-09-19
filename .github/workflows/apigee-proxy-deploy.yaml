@@ -26,8 +26,15 @@ jobs:
           workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc'
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+           project_id: 'vital-scout-430808-k8'
+           export_default_credentials: true
+
+      - name: Get access token
+        run: |
+             gcloud auth print-access-token
 
       - name: 'Use gcloud CLI'
         run: 'gcloud info'
