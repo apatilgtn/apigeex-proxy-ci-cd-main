@@ -33,10 +33,6 @@ jobs:
         
         # Add apigeecli to PATH
         echo 'export PATH=$HOME/.apigeecli/bin:$PATH' >> $GITHUB_ENV
-
-    - name: Verify apigeecli installation
-      run: |
-        apigeecli version
         
     - name: Set up gcloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
