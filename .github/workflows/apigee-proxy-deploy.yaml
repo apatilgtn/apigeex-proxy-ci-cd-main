@@ -1,59 +1,66 @@
-name: proxy-ci  # Descriptive workflow name
+name: Deploy Apigee Proxy
 
 on:
   push:
-    branches: [ main ]  # Only trigger on pushes to the main branch
-    paths:
-      - '.github/workflows/apigee-proxy-deploy.yaml'  # Trigger if workflow file changes
-      - 'src/**'  # Trigger if any files in src directory change
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  build:  # Job name
-    name: "Deploy To Dev"  # Descriptive job name
-    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
-
-    permissions:
-      contents: read  # Read access to repository content
-      id-token: write  # Write access to identify the user
+  deploy:
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4  # Checkout the repository code
+    - uses: actions/checkout@v2
 
-      - name: 'Auth'
-        uses: 'google-github-actions/auth@v2'
-        with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
-          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+    - name: Install apigeecli
+      run: |
+        go install github.com/apigee/apigeecli@latest
+        echo "${HOME}/go/bin" >> $GITHUB_PATH
 
-      - name: 'Use gcloud CLI'
-        run: 'gcloud info'
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v0.2.0
+      with:
+        service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+        project_id: 'vital-scout-430808-k8'
 
-      - name: Create API bundle
-        run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
-      - name: Install apigeecli
-        run: |
-             curl -L https://raw.githubusercontent.com/apigee/apigeecli/main/downloadLatest.sh | sh -
-             sudo mv apigeecli /usr/local/bin/apigeecli
+    - name: Authenticate gcloud
+      run: |
+        gcloud auth activate-service-account --key-file=<(echo '${{ secrets.GCP_CREDENTIALS }}' | base64 --decode)
 
-      - name: Upload API Proxy Bundle
-        id: upload
-        env:
-           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |
-             ACCESS_TOKEN=$(gcloud auth print-access-token)
-             response=$(apigeecli apis create bundle -f proxy.zip -n hello-world -o $APIGEE_ORG -t $ACCESS_TOKEN)
-             echo "APIgee Response: $response"
-             revision=$(echo "$response" | jq --raw-output .revision)
-             echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
-    
-      - name: Deploy Revision  # Deploy the uploaded revision to dev environment
-        env:
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          curl --fail -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/dev/apis/hello-world-test/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+    - name: Get Access Token
+      id: get_token
+      run: |
+        ACCESS_TOKEN=$(gcloud auth print-access-token)
+        echo "::set-output name=token::$ACCESS_TOKEN"
+
+    - name: Create API Proxy Bundle
+      run: zip -r apiproxy.zip apiproxy
+
+    - name: Deploy API Proxy
+      env:
+        APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+        APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
+        PROXY_NAME: ${{ secrets.PROXY_NAME }}
+      run: |
+        apigeecli apis create bundle -f apiproxy.zip -n $PROXY_NAME -o $APIGEE_ORG -t ${{ steps.get_token.outputs.token }}
+        LATEST_REVISION=$(apigeecli apis list revisions -n $PROXY_NAME -o $APIGEE_ORG -t ${{ steps.get_token.outputs.token }} | jq -r '.[]' | sort -n | tail -1)
+        apigeecli apis deploy -n $PROXY_NAME -o $APIGEE_ORG -e $APIGEE_ENV -r $LATEST_REVISION -t ${{ steps.get_token.outputs.token }}
+
+    - name: Verify Deployment
+      env:
+        APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+        APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
+        PROXY_NAME: ${{ secrets.PROXY_NAME }}
+      run: |
+        DEPLOYMENT_STATUS=$(apigeecli apis getdeployment -n $PROXY_NAME -o $APIGEE_ORG -e $APIGEE_ENV -t ${{ steps.get_token.outputs.token }} | jq -r '.state')
+        if [ "$DEPLOYMENT_STATUS" != "deployed" ]; then
+          echo "Deployment failed. Status: $DEPLOYMENT_STATUS"
+          exit 1
+        fi
+        echo "Deployment successful!"
