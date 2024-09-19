@@ -18,12 +18,11 @@ jobs:
       with:
         go-version: 1.22
 
-    - name: Build and install apigeecli
+    - name: Install apigeecli
       run: |
-           git fetch --all
-           git clone --recursive https://github.com/apigee/apigeecli.git
-           cd apigeecli
-           go build -o apigeecli
+           LATEST_RELEASE=$(curl -s https://api.github.com/repos/apigee/apigeecli/releases/latest | grep "tag_name" | cut -d '"' -f 4)
+           curl -L "https://github.com/apigee/apigeecli/releases/download/${LATEST_RELEASE}/apigeecli-linux-amd64" -o apigeecli
+           chmod +x apigeecli
            sudo mv apigeecli /usr/local/bin/
            apigeecli version
     
