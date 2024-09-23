@@ -29,13 +29,13 @@ jobs:
         run: |
           cat creds.json
 
-      - name: Activate service account
-        env:
-          ACCESS_TOKEN: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Create temporary file for credentials
         run: |
-         echo "$ACCESS_TOKEN" > /tmp/access_token.b64
-         base64 --decode /tmp/access_token.b64 > /tmp/creds.json         
-         gcloud auth activate-service-account --key-file=/tmp/creds.json
+          echo "${{ secrets.GCP_CREDENTIALS }}" | base64 --decode > /tmp/creds.json
+
+      - name: Activate service account
+        run: gcloud auth activate-service-account --key-file=/tmp/creds.json
+
         
       - name: Get Access Token
         id: get_access_token
