@@ -37,11 +37,16 @@ jobs:
           sudo apt-get update && sudo apt-get install -y google-cloud-sdk
           gcloud --version
 
+   
+      - name: Debug GCP Credentials
+        run: echo "${{ secrets.GCP_CREDENTIALS }}"  # Be cautious with this step
+
       - name: Create service account key file
-        run: echo "${{ secrets.GCP_CREDENTIALS }}" | jq -r . > creds.json
+        run: echo "${{ secrets.GCP_CREDENTIALS }}" > creds.json
 
       - name: Authenticate to Google Cloud
         run: |
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}  # Make sure to add this secret in your GitHub settings
           gcloud auth activate-service-account --key-file=creds.json
 
       - name: Get Access Token
