@@ -29,12 +29,23 @@ jobs:
           sudo chmod +x /usr/local/bin/apigeecli
           apigeecli --version
 
-      - name: Authenticate with Apigee
-        run: |
-          echo "${{ secrets.GCP_CREDENTIALS }}" > creds.json
-          apigeecli auth login --service-account creds.json
+
+      - name: Set up Apigee credentials
         env:
-          GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          APIGEE_CREDS: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+          echo "$APIGEE_CREDS" > apigee_sa_key.json
+
+      - name: Authenticate with apigeecli
+        run: |
+          apigeecli auth login --service-account apigee_sa_key.json
+
+      - name: Run apigeecli commands
+        run: |
+          apigeecli orgs list -t ${{ secrets.GCP_CREDENTIALS }}
+          apigeecli apis list -o ${{ secrets.APIGEE_ORG }} -t ${{ secrets.GCP_CREDENTIALS }}
+
+ 
         
 
       - name: Deploy API Proxy
