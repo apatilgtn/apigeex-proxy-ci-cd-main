@@ -42,7 +42,13 @@ jobs:
         run: |
           echo "$APIGEE_SA_KEY" > apigee_sa_key.json
           cat apigee_sa_key.json  # Print the content to verify (remove sensitive info before committing)
-          apigeecli token cache -a apigee_sa_key.json
+
+      - name: Generate token with apigeecli
+        env:
+          APIGEE_SA_KEY: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+          echo "$APIGEE_SA_KEY" > apigee_sa_key.json
+          apigeecli token gen -a apigee_sa_key.json --verbose
 
       - name: Run apigeecli commands
         run: |
