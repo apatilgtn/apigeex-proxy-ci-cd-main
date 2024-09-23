@@ -25,7 +25,7 @@ jobs:
           token_format: access_token
           create_credentials_file: true
           activate_credentials_file: true
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
+          #workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'  # Properly formatted service account email
 
       - uses: google-github-actions/setup-gcloud@v1  # Set up Google Cloud SDK
