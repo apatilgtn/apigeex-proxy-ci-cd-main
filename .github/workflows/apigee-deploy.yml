@@ -50,4 +50,4 @@ jobs:
 
       - name: Deploy API Proxy with ApigeeCLI using Access Token
         run: |
-          apigeecli apis deploy --org ${{ secrets.APIGEE_ORG }} --env ${{ secrets.APIGEE_ENV }} --bundle ./apiproxy --name hello-world-test --token ${{ steps.get_access_token.outputs.access_token }}
+          apigeecli apis deploy --org ${{ secrets.APIGEE_ORG }} --env ${{ secrets.APIGEE_ENV }} --name hello-world-test --rev 2 --token ${{ steps.get_access_token.outputs.access_token }}
