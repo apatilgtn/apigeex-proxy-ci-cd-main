@@ -1,0 +1,53 @@
+name: Deploy API Proxy to Apigee
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/apigee-deploy.yml'
+      - 'api-proxy/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.APIGEE_ORG }}
+          service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Authenticate with Google Cloud
+        run: |
+          echo "Authenticating with Google Cloud..."
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_CREDENTIALS }}
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "Access token obtained."
+
+      - name: Create API Proxy Bundle
+        run: |
+          cd api-proxy
+          zip -r ../api_proxy_bundle.zip .  # Create a zip of the API proxy directory
+
+      - name: Deploy API Proxy
+        env:
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}  # Your Apigee organization name
+          APIGEE_ENV: ${{ secrets.APIGEE_ENV }}  # Your Apigee environment name
+        run: |
+          echo "Deploying API Proxy..."
+          curl -X POST \
+            "https://apigee.googleapis.com/v1/organizations/${{ env.APIGEE_ORG }}/apis?action=import&name=hello-world-test" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @api_proxy_bundle.zip
+
+      - name: Deploy API Proxy Revision
+        run: |
+          echo "Deploying new revision..."
+          curl -X POST \
+            "https://apigee.googleapis.com/v1/organizations/${{ env.APIGEE_ORG }}/environments/${{ env.APIGEE_ENV }}/apis/hello-world-test/revisions/1/deployments" \
+            -H "Authorization: Bearer $ACCESS_TOKEN"
