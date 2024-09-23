@@ -40,12 +40,6 @@ jobs:
         run: gcloud info
 
 
-        
-      - name: Get Access Token
-        id: get_access_token
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          echo "::set-output name=access_token::$ACCESS_TOKEN"
 
       - name: Set up apigeecli
         run: |
