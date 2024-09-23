@@ -24,6 +24,7 @@ jobs:
         with:
           project_id: ${{ secrets.APIGEE_ORG }}
           service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+          credentials: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Authenticate with Google Cloud
         run: |
