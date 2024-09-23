@@ -1,62 +1,57 @@
-name: Deploy Apigee Proxies
+name: proxy-ci  # Descriptive workflow name
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]  # Only trigger on pushes to the main branch
+    paths:
+      - '.github/workflows/apigee-deploy.yml'  # Trigger if workflow file changes
+      - 'src/**'  # Trigger if any files in src directory change
 
 jobs:
-  deploy-apigee:
-    runs-on: ubuntu-latest
+  build:  # Job name
+    name: "Deploy To ApigeeX"  # Descriptive job name
+    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: read  # Read access to repository content
+      id-token: write  # Write access to identify the user
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # Checkout the repository code
 
-      - name: Set up apigeecli
-        run: |
-          sudo apt-get update
-          sudo apt-get install unzip
-          wget https://github.com/apigee/apigeecli/releases/latest/download/apigeecli_v2.4.3_Linux_x86_64.zip
-          ls
-          unzip apigeecli_v2.4.3_Linux_x86_64.zip
-          find . -name "apigeecli"
-          sudo mv ./apigeecli_v2.4.3_Linux_x86_64/apigeecli /usr/local/bin/
-          sudo chmod +x /usr/local/bin/apigeecli
-          apigeecli --version
-
-
-      - name: Set up Apigee credentials
-        env:
-          APIGEE_CREDS: ${{ secrets.GCP_CREDENTIALS }}
-        run: |
-          echo "$APIGEE_CREDS" > apigee_sa_key.json
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+      # Use pre-built `setup-gcloud` action for authentication
+      - uses: google-github-actions/auth@v2
         with:
-          service_account_key: ${{ secrets.GCP_CREDENTIALS }}
-          export_default_credentials: true
+          token_format: access_token
+          create_credentials_file: true
+          activate_credentials_file: true
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'  # Properly formatted service account email
 
-      - name: Generate access token
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          echo "ACCESS_TOKEN=$GCP_CREDENTIALS" >> $GITHUB_ENV
+      - uses: google-github-actions/setup-gcloud@v1  # Set up Google Cloud SDK
 
-      - name: Use apigeecli with token
-        run: |
-          apigeecli apis list -o ${{ secrets.APIGEE_ORG }} -t $ACCESS_TOKEN
-        
+      - name: Create API bundle
+        run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
 
-      - name: Deploy API Proxy
-        run: |
-          apigeecli apis create bundle --org ${{ secrets.APIGEE_ORG }} --env ${{ secrets.APIGEE_ENV }} --bundle ./apiproxy --name hello-world-test --wait
+      - name: Upload API Proxy Bundle
+        id: upload
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          #APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+        run: |  # Multi-line command with output capture
+          response=$(curl --fail -X POST \
+            -H "Content-Type: multipart/form-data" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -F "file=@proxy.zip" \
+            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=WeatherForecastAPI" \
+            --silent)
 
-      - name: Deploy new revision
-        run: |
-          REV=$(apigeecli apis latestrev --name hello-world-test --org ${{ secrets.APIGEE_ORG }})
-          apigeecli apis deploy --org ${{ secrets.APIGEE_ORG }} --env ${{ secrets.APIGEE_ENV }} --name hello-world-test --rev $REV --wait
+          echo "APIgee Response: $response"
+          revision=$(echo "$response" | jq --raw-output .revision)
+          echo "::set-output name=apigee-revision::$revision"
+
+      - name: Deploy Revision # Deploy the uploaded revision to dev environment
+        run: |  # Multi-line command with access token reference
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/WeatherForecastAPIrevisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
