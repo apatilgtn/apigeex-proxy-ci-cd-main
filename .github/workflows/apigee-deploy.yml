@@ -22,15 +22,19 @@ jobs:
           gcloud --version
 
       - name: Create service account key file
-        run: |
-          echo '${{ secrets.GCP_CREDENTIALS }}' | base64 -d > creds.json
+        run: echo "${{ secrets.GCP_CREDENTIALS }}" > creds.json
 
+             
       - name: Verify service account key
         run: |
           cat creds.json
 
       - name: Activate service account
-        run: gcloud auth activate-service-account --key-file=creds.json
+        env:
+          ACCESS_TOKEN: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+           echo "$ACCESS_TOKEN" | base64 -d > /tmp/creds.json
+           gcloud auth activate-service-account --key-file=/tmp/creds.json
         
       - name: Get Access Token
         id: get_access_token
