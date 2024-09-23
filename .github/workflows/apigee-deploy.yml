@@ -34,11 +34,6 @@ jobs:
           sudo apt-get update && sudo apt-get install -y google-cloud-sdk
           gcloud --version
 
-      - name: Get Access Token
-        id: get_access_token
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          echo "::set-output name=access_token::$ACCESS_TOKEN"
 
       - name: Create service account key file
         run: echo "${{ secrets.GCP_CREDENTIALS }}" > creds.json
