@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]  # Only trigger on pushes to the main branch
     paths:
-      - '.github/workflows/apigee-deploy.yml'  # Trigger if workflow file changes
+      - '.github/workflows/apigee-proxy-deploy.yaml'  # Trigger if workflow file changes
       - 'src/**'  # Trigger if any files in src directory change
 
 jobs:
@@ -23,9 +23,9 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          create_credentials_file: false
+          create_credentials_file: true
           activate_credentials_file: true
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'  # Properly formatted service account email
 
       - uses: google-github-actions/setup-gcloud@v1  # Set up Google Cloud SDK
@@ -36,8 +36,8 @@ jobs:
       - name: Upload API Proxy Bundle
         id: upload
         env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
         run: |  # Multi-line command with output capture
           response=$(curl --fail -X POST \
             -H "Content-Type: multipart/form-data" \
