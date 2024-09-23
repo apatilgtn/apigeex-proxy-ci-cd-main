@@ -33,6 +33,8 @@ jobs:
         run: |
           echo "${{ secrets.GCP_CREDENTIALS }}" > creds.json
           apigeecli auth login --service-account creds.json
+        env:
+          GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
         
 
       - name: Deploy API Proxy
