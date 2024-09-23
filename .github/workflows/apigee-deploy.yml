@@ -41,7 +41,8 @@ jobs:
           APIGEE_SA_KEY: ${{ secrets.GCP_CREDENTIALS }}
         run: |
           echo "$APIGEE_SA_KEY" > apigee_sa_key.json
-          apigeecli token cache -a apigee_sa_key.json
+          cat apigee_sa_key.json  # Print the content to verify (remove sensitive info before committing)
+          apigeecli token cache -a apigee_sa_key.json --verbose  # Add verbose flag for more info
 
       - name: Run apigeecli commands
         run: |
