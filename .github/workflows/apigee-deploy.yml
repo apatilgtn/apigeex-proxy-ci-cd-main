@@ -22,8 +22,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install unzip
           wget https://github.com/apigee/apigeecli/releases/latest/download/apigeecli_v2.4.3_Linux_x86_64.zip
+          ls
           unzip apigeecli_v2.4.3_Linux_x86_64.zip
-          sudo mv apigeecli /usr/local/bin/
+          find . -name "apigeecli"
+          sudo mv ./apigeecli_v2.4.3_Linux_x86_64/apigeecli /usr/local/bin/
+          sudo chmod +x /usr/local/bin/apigeecli
           apigeecli --version
 
       - name: Authenticate with Apigee
