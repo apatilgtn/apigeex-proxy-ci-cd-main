@@ -33,6 +33,13 @@ jobs:
       - name: Create API bundle
         run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
 
+      - name: Authenticate to GCP
+        id: auth
+        run: |
+           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+           echo "::set-output name=access_token::$ACCESS_TOKEN"
+
+
       - name: Upload API Proxy Bundle
         id: upload
         env:
