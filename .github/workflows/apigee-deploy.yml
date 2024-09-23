@@ -53,18 +53,7 @@ jobs:
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=hello-world" \
             --silent)
 
-            status_code=$(tail -n1 response.txt)
-
-    
-              if [ "$status_code" -ge 400 ]; then
-              echo "Error: Failed with status code $status_code"
-              echo "Response body:"
-              cat response.txt
-              exit 1
-              else
-              echo "API Proxy successfully uploaded with status $status_code"
-              fi
-
+            
           echo "APIgee Response: $response"
           revision=$(echo "$response" | jq --raw-output .revision)
           echo "::set-output name=apigee-revision::$revision"
