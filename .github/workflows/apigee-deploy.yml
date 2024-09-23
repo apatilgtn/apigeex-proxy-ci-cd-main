@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]  # Only trigger on pushes to the main branch
     paths:
-      - '.github/workflows/apigee-proxy-deploy.yaml'  # Trigger if workflow file changes
+      - '.github/workflows/apigee-deploy.yaml'  # Trigger if workflow file changes
       - 'src/**'  # Trigger if any files in src directory change
 
 jobs:
