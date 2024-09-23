@@ -43,7 +43,7 @@ jobs:
             -H "Content-Type: multipart/form-data" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -F "file=@proxy.zip" \
-            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=hello-world" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=hello-world" \
             --silent)
 
           echo "APIgee Response: $response"
