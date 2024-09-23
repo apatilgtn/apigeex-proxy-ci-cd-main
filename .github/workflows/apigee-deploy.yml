@@ -62,4 +62,5 @@ jobs:
         run: |  # Multi-line command with access token reference
           curl --fail -X POST \
             -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/hello-world/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+            "https://apigee.googleapis.com/v1/organizations//$APIGEE_ORG/environments/dev/apis/hello-world/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+
