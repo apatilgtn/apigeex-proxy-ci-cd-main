@@ -36,26 +36,20 @@ jobs:
         run: |
           echo "$APIGEE_CREDS" > apigee_sa_key.json
 
-      - name: Authenticate with apigeecli
-        env:
-          APIGEE_SA_KEY: ${{ secrets.GCP_CREDENTIALS }}
-        run: |
-          echo "$APIGEE_SA_KEY" > apigee_sa_key.json
-          cat apigee_sa_key.json  # Print the content to verify (remove sensitive info before committing)
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+          export_default_credentials: true
 
-      - name: Generate token with apigeecli
-        env:
-          APIGEE_SA_KEY: ${{ secrets.GCP_CREDENTIALS }}
+      - name: Generate access token
         run: |
-          echo "$APIGEE_SA_KEY" > apigee_sa_key.json
-          apigeecli token gen -a apigee_sa_key.json 
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "ACCESS_TOKEN=$GCP_CREDENTIALS" >> $GITHUB_ENV
 
-      - name: Run apigeecli commands
+      - name: Use apigeecli with token
         run: |
-          apigeecli orgs list -t ${{ secrets.GCP_CREDENTIALS }}
-          apigeecli apis list -o ${{ secrets.APIGEE_ORG }} -t ${{ secrets.GCP_CREDENTIALS }}
-
- 
+          apigeecli apis list -o ${{ secrets.APIGEE_ORG }} -t $ACCESS_TOKEN
         
 
       - name: Deploy API Proxy
