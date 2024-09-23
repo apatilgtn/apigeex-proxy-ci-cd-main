@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "vital-scout-430808-k8",
+  "private_key_id": "02f9938e9f4ae5660e9e0efb7bf3283e253bc169",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCrteG1CPdEsiAk\nm2+9O79k8ys5FRnwmB3ATV6rs9e81/iVX/RTFLCwzzSyxXE6op9e5zEhyYRPM88J\nB+emqu7VzY5CjJjYb6CDdA97thIoe4dVVBmhI6LKHfE3Deqvawk8IlS2wvk+b7JQ\nzy2g8UAxFAb1I7lQN/ftFXBv33CwlJbjWhLUo0s2h7d1X0ZL2NhQN8YRZnHwH/s1\nS4TFiXkGJ8GlwEqyY2aLdkA9kkfEQJfHkofofaagjU5ab5XkjiA1wW2WAQ7+e5Rt\ngfQajrEP3FWnpzsydDtImWKVuxvZBswcLOGs5SRbJWE2EpJ1zoz6c6d2CxnUc6fX\nwTwbioxpAgMBAAECggEACtV7+zcoms3+VzDzeOYXKmBpXr2lGFgQsHxxN7YuK30Y\n8xvNx5wrlcxND+aDQWbXVV6S7AXR8klbi79S72IjlZvVmP9T+Xv5jbG59F1FggZh\nQJIA1/juoYAIIygeoZjISWIFJE7i+PyFLLIVt+zg1vfjhH4PiC8v1mae5IAdlRaA\nfub1eza1WhP/ENacLTRdXpAI45kQ6NB680zLE91NA7f3oOCOnkdeO82ryvDnl0jW\nKhBHqQoxkHhP1mRhdKiVONzXN4Nvn9lk6j4RQYZEkQ7/ZIKjXXWw0aKw294OKAdA\nY9oYXWC2Z5sQw09VUljnt+v0Cm3vNOPpZSjHNqVGMQKBgQDbOz+MA4ICKmZgebew\nHHl/nERVA/hmndjseLWi+6KhPkHWOb0hCTws6gEW97agKRMkieNauThSv6ViugfJ\n7aH/ahVIRBLMDf4M2BjcLAJqqyUcGLLEq/OKA1S8BU25ZBMVIuOOA8tJp+7/IacP\nnouXzGt9RrKQDo8wqkiLKm1aJQKBgQDIgk9f3VCMymvu3Bmv09XOxVKhzH0OnCyy\nwFDj6jISWNTvRR795nILEDizHBZQHWkqgJUBZOT1HUa/kIr4qViaTGFqNFvlf7Av\n4QEdZ7x/ZI6VZvV2FgIBnDiMJ92gfGr9i5zkgHuf3Ye18f3j77PBL4m+7qahP3o1\nnCgfXS379QKBgQCWLyB5am3FzgYUUU3k95zELukg1Hd21OumE4ta+8eNbnjrqOJH\nn2v52NSmR0x0q67ReSSnIfvTtDY4S/jJ/GDd+G5b80ZtQ6imY+Oj8QI20Me7V7Af\nyywrf9yscXWta0EnWZ9Jyo+ZBdJUNVmc+Z/nfcKlL6ljxpWRYRYRQB9pgQKBgQC1\nPx3S8TKD4eKI6wqJJrqpizLzsO4Gi+PXvQIh06xpa0Un+FpYdrv2BjbKqQP+bWeI\nFO0ccoCIlWtDdLw6pJHEAHE6WJQNM0wnK4QfeYspuNMueABAOwqbPATdpJexH2Zz\nRIWRBBc73jtzm4i+Rwo9AeTI499Z+RBWb47RMyCDFQKBgE5puwh8UftzalOltXNC\nGf6WP7M1HjyZe1eyMY0ur+ne3niGXvfINYyFirRm08KDrvaNvOvPEmBXlJFk/NL7\nNmdFzOL0Rf2FEG2DyLhKdt20VSLt+/QA0eAvty5lfNiY8tIGhLl564KrspS4+Cmo\nQgoOWADzyxxs3ZiqVSVWqSOr\n-----END PRIVATE KEY-----\n",
+  "client_email": "github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com",
+  "client_id": "110236519646318707039",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/github-actions-workflow%40vital-scout-430808-k8.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
