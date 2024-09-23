@@ -48,7 +48,7 @@ jobs:
           APIGEE_SA_KEY: ${{ secrets.GCP_CREDENTIALS }}
         run: |
           echo "$APIGEE_SA_KEY" > apigee_sa_key.json
-          apigeecli token gen -a apigee_sa_key.json --verbose
+          apigeecli token gen -a apigee_sa_key.json 
 
       - name: Run apigeecli commands
         run: |
