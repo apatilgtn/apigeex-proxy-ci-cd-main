@@ -52,6 +52,9 @@ jobs:
           sudo mv ./apigeecli_v2.4.3_Linux_x86_64/apigeecli /usr/local/bin/
           sudo chmod +x /usr/local/bin/apigeecli
           apigeecli --version
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys C0BA5CE6DC6315A3
+
+          
 
       - name: Deploy API Proxy with ApigeeCLI using Access Token
         run: |
