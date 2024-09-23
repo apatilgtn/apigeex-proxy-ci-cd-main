@@ -19,9 +19,10 @@ jobs:
 
       - name: Set up apigeecli
         run: |
-          wget https://github.com/apigee/apigeecli/releases/download/v1.1.5/apigeecli_Linux_x86_64.tar.gz
+          wget https://github.com/apigee/apigeecli/releases/latest/download/apigeecli_Linux_x86_64.tar.gz
           tar -xvzf apigeecli_Linux_x86_64.tar.gz
           sudo mv apigeecli /usr/local/bin/
+          apigeecli --version
 
       - name: Authenticate with Apigee
         run: |
