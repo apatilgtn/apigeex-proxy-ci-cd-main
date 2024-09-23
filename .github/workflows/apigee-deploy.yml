@@ -37,8 +37,11 @@ jobs:
           echo "$APIGEE_CREDS" > apigee_sa_key.json
 
       - name: Authenticate with apigeecli
+        env:
+          APIGEE_SA_KEY: ${{ secrets.GCP_CREDENTIALS }}
         run: |
-          apigeecli auth login --service-account apigee_sa_key.json
+          echo "$APIGEE_SA_KEY" > apigee_sa_key.json
+          apigeecli token cache -a apigee_sa_key.json
 
       - name: Run apigeecli commands
         run: |
