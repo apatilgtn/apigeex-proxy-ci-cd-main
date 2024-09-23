@@ -31,14 +31,21 @@ jobs:
 
       - name: Create temporary file for credentials
         run: |
-              echo "${{ secrets.GCP_CREDENTIALS }}" | base64 --decode | tr -d '\r' > /tmp/creds.json
-
+          echo "${{ secrets.GCP_CREDENTIALS }}" | base64 --decode > /tmp/creds.json
+          # Check if the file is created and not empty
+          if [ ! -s /tmp/creds.json ]; then
+            echo "creds.json is empty or not created."
+            exit 1
+          fi
 
       - name: Verify creds.json content
-        run: cat /tmp/creds.json
+        run: |
+          echo "Contents of creds.json:"
+          cat /tmp/creds.json
 
       - name: Activate service account
         run: gcloud auth activate-service-account --key-file=/tmp/creds.json
+
 
         
       - name: Get Access Token
