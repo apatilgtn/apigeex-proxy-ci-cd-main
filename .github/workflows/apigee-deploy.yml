@@ -1,57 +1,50 @@
-name: proxy-ci  # Descriptive workflow name
+name: Deploy Apigee Proxies with Access Token
 
 on:
   push:
-    branches: [ main ]  # Only trigger on pushes to the main branch
-    paths:
-      - '.github/workflows/apigee-deploy.yml'  # Trigger if workflow file changes
-      - 'src/**'  # Trigger if any files in src directory change
+    branches:
+      - main
 
 jobs:
-  build:  # Job name
-    name: "Deploy To ApigeeX"  # Descriptive job name
-    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
-
-    permissions:
-      contents: read  # Read access to repository content
-      id-token: write  # Write access to identify the user
+  deploy-apigee:
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4  # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # Use pre-built `setup-gcloud` action for authentication
-      - uses: google-github-actions/auth@v2
-        with:
-          token_format: access_token
-          create_credentials_file: true
-          activate_credentials_file: true
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'  # Properly formatted service account email
+      - name: Set up Google Cloud SDK
+        run: |
+          sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates gnupg
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          sudo apt-get install -y google-cloud-sdk
+          gcloud --version
 
-      - uses: google-github-actions/setup-gcloud@v1  # Set up Google Cloud SDK
+      - name: Authenticate with Google Cloud using Service Account
+        id: auth
+        run: |
+          echo "${{ secrets.GCP_CREDENTIALS }}" > creds.json
+          gcloud auth activate-service-account --key-file=creds.json
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+        
+      - name: Get Access Token
+        id: get_access_token
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "::set-output name=access_token::$ACCESS_TOKEN"
 
-      - name: Create API bundle
-        run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
+      - name: Set up apigeecli
+        run: |
+          sudo apt-get update
+          sudo apt-get install unzip
+          wget https://github.com/apigee/apigeecli/releases/latest/download/apigeecli_v2.4.3_Linux_x86_64.zip
+          ls
+          unzip apigeecli_v2.4.3_Linux_x86_64.zip
+          find . -name "apigeecli"
+          sudo mv ./apigeecli_v2.4.3_Linux_x86_64/apigeecli /usr/local/bin/
+          sudo chmod +x /usr/local/bin/apigeecli
+          apigeecli --version
 
-      - name: Upload API Proxy Bundle
-        id: upload
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          #APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |  # Multi-line command with output capture
-          response=$(curl --fail -X POST \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -F "file=@proxy.zip" \
-            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=WeatherForecastAPI" \
-            --silent)
-
-          echo "APIgee Response: $response"
-          revision=$(echo "$response" | jq --raw-output .revision)
-          echo "::set-output name=apigee-revision::$revision"
-
-      - name: Deploy Revision # Deploy the uploaded revision to dev environment
-        run: |  # Multi-line command with access token reference
-          curl --fail -X POST \
-            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/WeatherForecastAPIrevisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+      - name: Deploy API Proxy with ApigeeCLI using Access Token
+        run: |
+          apigeecli apis create bundle --org ${{ secrets.APIGEE_ORG }} --env ${{ secrets.APIGEE_ENV }} --bundle ./apiproxy --name MyProxy --token ${{ steps.get_access_token.outputs.access_token }}
