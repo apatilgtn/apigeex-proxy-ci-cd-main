@@ -58,10 +58,8 @@ jobs:
           revision=$(echo "$response" | jq --raw-output .revision)
           echo "::set-output name=apigee-revision::$revision"
 
-      - name: Deploy Revision
-        run: |
-          echo "Using APIGEE_ORG: $APIGEE_ORG"
-          echo "Deploying revision: ${{ steps.upload.outputs.apigee-revision }}"
+      - name: Deploy Revision # Deploy the uploaded revision to dev environment
+        run: |  # Multi-line command with access token reference
           curl --fail -X POST \
-          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/dev/apis/hello-world/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+            "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/hello-world/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
