@@ -114,7 +114,7 @@ jobs:
           APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          MAX_RETRIES=10
+          MAX_RETRIES=30
           RETRY_INTERVAL=35  # Time to wait (in seconds) between retries
           COUNTER=0
 
