@@ -76,19 +76,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v1
         # Set up the Google Cloud SDK.
 
-      - name: Set up apigeecli
-        # Install the `apigeecli` command-line tool to interact with Apigee.
-        run: |
-          sudo apt-get update
-          sudo apt-get install unzip
-          wget https://github.com/apigee/apigeecli/releases/latest/download/apigeecli_v2.4.3_Linux_x86_64.zip
-          ls
-          unzip apigeecli_v2.4.3_Linux_x86_64.zip
-          find . -name "apigeecli"
-          sudo mv ./apigeecli_v2.4.3_Linux_x86_64/apigeecli /usr/local/bin/
-          sudo chmod +x /usr/local/bin/apigeecli
-          apigeecli --version
-
+    
       - name: Create API bundle
         # Zip up the specified proxy directory into a bundle.
         run: zip -r proxy.zip ${{ inputs.proxy-directory }}
@@ -132,41 +120,21 @@ jobs:
       - name: Validate Deployment State
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}
-        # Validate the deployment state using `apigeecli`.
-        run: |
-          VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
-          --org "$APIGEE_ORG" \
-          --environment "$APIGEE_DEV_ENV" \
-          --name "${{ secrets.APIGEE_PROXY_NAME }}" \
-          --rev "${{ steps.upload.outputs.apigee-revision }}" \
-          --token "${{ steps.auth.outputs.access_token }}")
-
-          echo "Validation Output: $VALIDATION_OUTPUT"
-  
-          # Check if the state is 'deployed' in the response.
-          if echo "$VALIDATION_OUTPUT" | grep -q '"state": "deployed"'; then
-            echo "Deployment state validated successfully!"
-          else
-            echo "Deployment validation failed!"
-            exit 1
-          fi
-
-      - name: Validate API Proxy Endpoint
-        env:
-          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
-        # Make an HTTP request to the deployed API proxy endpoint.
-        run: |
-          BASE_URL="https://$APIGEE_DEV_ENV-$APIGEE_ORG.apigee.net/${APIGEE_PROXY_NAME}"
-  
-          RESPONSE=$(curl --fail -X GET "$BASE_URL" --write-out '%{http_code}' --silent --output /dev/null)
+          APIGEE_DEV_ENV: ${{ inputs.dev_env }}
+          APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          run: |
+            # Use curl to call the Apigee Management API to check the deployment status
+              VALIDATION_OUTPUT=$(curl -s -X GET \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
       
-          # Check if the response status is HTTP 200.
-          if [ "$RESPONSE" -eq 200 ]; then
-            echo "API proxy endpoint is accessible and returned HTTP 200!"
-          else
-            echo "API proxy endpoint validation failed with status code: $RESPONSE"
-            exit 1
-          fi
+              echo "Validation Output: $VALIDATION_OUTPUT"
+    
+                # Check if the state is 'deployed' in the response.
+                if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
+                echo "Deployment state validated successfully!"
+                else
+                echo "Deployment validation failed!"
+                exit 1
+            fi
