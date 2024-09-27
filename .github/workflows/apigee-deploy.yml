@@ -11,6 +11,9 @@ on:
 jobs:
   API_Proxy_Deployment:
     uses: ./.github/workflows/Reusable-proxy-deploy.yml
+    permissions:
+      contents: read
+      id-token: write 
     with:
       proxy_name: 'WeatherForecastAPI'  # Replace with your proxy name or dynamically pass it
       dev_env: 'dev'  # Development environment
