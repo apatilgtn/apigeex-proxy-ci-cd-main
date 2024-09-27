@@ -48,7 +48,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
-      id-token: none
+      id-token: write
     env:
       APIGEE_ORG: ${{ secrets.apigee_org }}
       APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
