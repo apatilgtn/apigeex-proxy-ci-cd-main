@@ -58,7 +58,7 @@ jobs:
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
-       - name: Set up apigeecli
+      - name: Set up apigeecli
         run: |
           sudo apt-get update
           sudo apt-get install unzip
