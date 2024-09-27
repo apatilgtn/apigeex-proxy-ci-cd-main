@@ -97,7 +97,6 @@ jobs:
       - name: Deploy Revision
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
         run: |
           curl -X POST \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
@@ -105,11 +104,10 @@ jobs:
       - name: Validate Deployment
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
         run: |
           VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
           --org "$APIGEE_ORG" \
-          --env "$APIGEE_ENV" \
+          --env "$APIGEE_DEV_ENV" \
           --name "${{ secrets.APIGEE_PROXY_NAME }}" \
           --rev "${{ steps.deploy.outputs.revision }}" \
           --token "${{ steps.auth.outputs.access_token }}")
