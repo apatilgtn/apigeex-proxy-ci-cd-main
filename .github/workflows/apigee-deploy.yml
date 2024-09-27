@@ -19,6 +19,6 @@ jobs:
       #proxy-path: ''
       proxy-directory: 'apiproxy'
     secrets:
-      apigee_org: ${{ secrets.APIGEE_ORG }}  # Pass the secret to the reusable workflow
-      google_credentials: ${{ secrets.GCP_CREDENTIALS }}  # Pass the secret to the reusable workflow
-      service_account: ${{ secrets.SERVICE_ACCOUNT }}  # Pass the secret to the reusable workflow
+      apigee_org: ${{ secrets.APIGEE_ORG }}  # Pass the secret here directly
+      workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
+      service_account: ${{ secrets.SERVICE_ACCOUNT }}
