@@ -1,10 +1,8 @@
 name: Reusable Apigee Proxy Deployment
-# Define the name of the reusable workflow for deploying Apigee proxies.
 
 on:
   workflow_call:
     inputs:
-      # Workflow input parameters to configure the deployment process.
       proxy_name:
         description: The name of the API proxy to deploy
         required: true
@@ -31,9 +29,7 @@ on:
         required: false
         default: 'ubuntu-latest'
         type: 'string'
-
     secrets:
-      # Define required secrets for Apigee and GCP authentication.
       apigee_org:
         required: true
       service_account:
@@ -45,15 +41,10 @@ jobs:
   Deploy_Apigee_Proxy:
     name: "Deploy API"
     runs-on: ${{ inputs.runner }}
-    # Use the specified GitHub Actions runner (default: `ubuntu-latest`).
-
     permissions:
       contents: read
       id-token: write
-    # Set permissions for accessing repository content and identity tokens.
-
     env:
-      # Set environment variables from inputs and secrets.
       APIGEE_ORG: ${{ secrets.apigee_org }}
       APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
       APIGEE_DEV_ENV: ${{ inputs.dev_env }}
@@ -63,26 +54,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # Check out the code from the repository.
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc '
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
-        # Authenticate to Google Cloud using workload identity federation.
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
-        # Set up the Google Cloud SDK.
 
       - name: Create API bundle
-        # Zip up the specified proxy directory into a bundle.
         run: zip -r proxy.zip ${{ inputs.proxy-directory }}
 
       - name: Authenticate to GCP
         id: auth
-        # Retrieve an access token using the Google Cloud CLI.
         run: |
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
@@ -92,7 +78,6 @@ jobs:
         env:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        # Use the Apigee Management API to upload the API proxy bundle.
         run: |
           response=$(curl --fail -X POST \
             -H "Content-Type: multipart/form-data" \
@@ -103,45 +88,45 @@ jobs:
 
           echo "Apigee Response: $response"
 
-          # Extract the revision number from the response and set it as output.
           revision=$(echo "$response" | jq --raw-output .revision)
           echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
-      - name: Validate Deployment State
+      - name: Deploy and Validate Revision
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_DEV_ENV: ${{ inputs.dev_env }}
+          APIGEE_ENV: ${{ inputs.dev_env }}
           APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          MAX_RETRIES=30
-          RETRY_INTERVAL=35  # Time to wait (in seconds) between retries
-          COUNTER=0
+          curl -X POST \
+          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
 
-          # Loop to check the deployment status up to a maximum number of retries
-          while [ $COUNTER -lt $MAX_RETRIES ]; do
-            # Use curl to call the Apigee Management API to check the deployment status
+          echo "Waiting for deployment to complete..."
+          sleep 60
+
+          max_retries=5
+          retry_count=0
+          while [ $retry_count -lt $max_retries ]; do
             VALIDATION_OUTPUT=$(curl -s -X GET \
-              -H "Authorization: Bearer $ACCESS_TOKEN" \
-              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
-
+              -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
+            
             echo "Validation Output: $VALIDATION_OUTPUT"
-
-            # Check if the state is 'READY' in the response.
-            if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
-              echo "Deployment state validated successfully!"
+            
+            if echo "$VALIDATION_OUTPUT" | jq -e '.state == "READY"' > /dev/null; then
+              echo "Deployment validated successfully!"
               exit 0
-            elif echo "$VALIDATION_OUTPUT" | grep -q '"state": "PROGRESSING"'; then
-              echo "Deployment is still in progress... waiting for $RETRY_INTERVAL seconds before rechecking."
-              COUNTER=$((COUNTER+1))
-              sleep $RETRY_INTERVAL
+            elif echo "$VALIDATION_OUTPUT" | jq -e '.state == "PROGRESSING"' > /dev/null; then
+              echo "Deployment still in progress. Retrying..."
+              sleep 30
+              retry_count=$((retry_count+1))
             else
-              echo "Deployment validation failed or unexpected state!"
+              echo "Deployment failed or in unexpected state!"
               exit 1
             fi
           done
 
-          echo "Deployment did not reach READY state within the retry limit."
+          echo "Deployment validation failed after $max_retries retries!"
           exit 1
 
       - name: Validate Deployment State
@@ -150,16 +135,13 @@ jobs:
           APIGEE_DEV_ENV: ${{ inputs.dev_env }}
           APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-        # Validate the deployment state using Apigee Management API.
         run: |
-          # Use curl to call the Apigee Management API to check the deployment status.
           VALIDATION_OUTPUT=$(curl -s -X GET \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
 
           echo "Validation Output: $VALIDATION_OUTPUT"
 
-          # Check if the state is 'READY' in the response.
           if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
             echo "Deployment state validated successfully!"
           else
