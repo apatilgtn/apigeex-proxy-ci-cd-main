@@ -64,7 +64,7 @@ jobs:
         id: auth
         run: |
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
-          echo "::set-output name=access_token::$ACCESS_TOKEN"
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
       - name: Upload API Proxy Bundle
         id: upload
         env:
@@ -82,43 +82,36 @@ jobs:
 
           revision=$(echo "$response" | jq --raw-output .revision)
 
-          echo "::set-output name=apigee-revision::$revision"
+          echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
       - name: Deploy Revision
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
         run: |
           curl -X POST \
-
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
       - name: Validate Development deployment
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
           APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
-          run: |
-            echo "Validating $APIGEE_PROXY_NAME in $APIGEE_ENV"
-
-            response=$(curl -s -X GET \
-
-            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/deployments")
-
-              echo "Validation response: $response"
-             if [[ "$response" == *'"state":"ACTIVE"'* ]]; then
-              echo "Deployment successful!"
-              else
-                  echo "Deployment failed!"
-                  exit 1
-             fi
+        run: |
+          echo "Validating $APIGEE_PROXY_NAME in $APIGEE_ENV"
+          response=$(curl -s -X GET \
+          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/deployments")
+          echo "Validation response: $response"
+          if [[ "$response" == *'"state":"ACTIVE"'* ]]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed!"
+            exit 1
+          fi
       - name: Deploy to Test environment
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           echo "Deploying $APIGEE_PROXY_NAME to $APIGEE_TEST_ENV"
-
           curl -X POST \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_TEST_ENV/apis/$APIGEE_PROXY_NAME/revisions/$APIGEE_REVISION/deployments?override=true"
@@ -126,12 +119,10 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           echo "Validating $APIGEE_PROXY_NAME in $APIGEE_TEST_ENV"
-
           response=$(curl -s -X GET \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_TEST_ENV/apis/$APIGEE_PROXY_NAME")
           echo "Validation response: $response"
-
           if [[ "$response" == *'"state":"ACTIVE"'* ]]; then
             echo "Deployment successful!"
           else
@@ -142,20 +133,17 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           echo "Deploying $APIGEE_PROXY_NAME to $APIGEE_UAT_ENV"
-
           curl -X POST \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_UAT_ENV/apis/$APIGEE_PROXY_NAME/revisions/$APIGEE_REVISION/deployments?override=true"
       - name: Validate UAT deployment
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: >
+        run: |
           echo "Validating $APIGEE_PROXY_NAME in $APIGEE_UAT_ENV"
-
           response=$(curl -s -X GET \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_UAT_ENV/apis/$APIGEE_PROXY_NAME")
           echo "Validation response: $response"
-
           if [[ "$response" == *'"state":"ACTIVE"'* ]]; then
             echo "Deployment successful!"
           else
