@@ -96,32 +96,24 @@ jobs:
           curl -X POST \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
-      - name: Validate Development deployment
+      - name: Validate Deployment
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
-          APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
         run: |
-          echo "Validating $APIGEE_PROXY_NAME in $APIGEE_ENV"
-          response=$(curl -s -w "\n%{http_code}" -X GET \
-          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/deployments")
-    
-          http_code=$(tail -n1 <<< "$response")
-          content=$(sed '$ d' <<< "$response")
-    
-          echo "HTTP Status Code: $http_code"
-          echo "Response Content: $content"
-    
-          if [ $http_code -ne 200 ]; then
-            echo "API request failed with HTTP code $http_code"
-            exit 1
-          fi
-    
-          if [[ "$content" == *'"state":"ACTIVE"'* ]]; then
-            echo "Deployment successful!"
-            else
-            echo "Deployment not in ACTIVE state!"
+          VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
+            -o "$APIGEE_ORG" \
+            -e "$APIGEE_ENV" \
+            -n "${{ secrets.APIGEE_PROXY_NAME }}" \
+            -r "${{ steps.deploy.outputs.revision }}" \
+            -t "${{ steps.auth.outputs.access_token }}")
+          
+          echo "Validation Output: $VALIDATION_OUTPUT"
+          
+          if echo "$VALIDATION_OUTPUT" | grep -q '"state": "deployed"'; then
+            echo "Deployment validated successfully!"
+          else
+            echo "Deployment validation failed!"
             exit 1
           fi
       - name: Deploy to Test environment
