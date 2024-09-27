@@ -76,7 +76,6 @@ jobs:
         uses: google-github-actions/setup-gcloud@v1
         # Set up the Google Cloud SDK.
 
-    
       - name: Create API bundle
         # Zip up the specified proxy directory into a bundle.
         run: zip -r proxy.zip ${{ inputs.proxy-directory }}
@@ -102,7 +101,7 @@ jobs:
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=$APIGEE_PROXY_NAME" \
             --silent)
 
-          echo "APIgee Response: $response"
+          echo "Apigee Response: $response"
 
           # Extract the revision number from the response and set it as output.
           revision=$(echo "$response" | jq --raw-output .revision)
@@ -123,18 +122,19 @@ jobs:
           APIGEE_DEV_ENV: ${{ inputs.dev_env }}
           APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          run: |
-            # Use curl to call the Apigee Management API to check the deployment status
-              VALIDATION_OUTPUT=$(curl -s -X GET \
-              -H "Authorization: Bearer $ACCESS_TOKEN" \
-              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
-      
-              echo "Validation Output: $VALIDATION_OUTPUT"
-    
-                # Check if the state is 'deployed' in the response.
-                if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
-                echo "Deployment state validated successfully!"
-                else
-                echo "Deployment validation failed!"
-                exit 1
-            fi
+        # Validate the deployment state using Apigee Management API.
+        run: |
+          # Use curl to call the Apigee Management API to check the deployment status.
+          VALIDATION_OUTPUT=$(curl -s -X GET \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
+
+          echo "Validation Output: $VALIDATION_OUTPUT"
+
+          # Check if the state is 'READY' in the response.
+          if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
+            echo "Deployment state validated successfully!"
+          else
+            echo "Deployment validation failed!"
+            exit 1
+          fi
