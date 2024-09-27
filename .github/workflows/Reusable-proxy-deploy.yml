@@ -1,11 +1,7 @@
-# Name of the reusable workflow
 name: Reusable Apigee Proxy Deployment
 
-# Trigger for the workflow
 on:
-  # This workflow is designed to be called by other workflows
   workflow_call:
-    # Input parameters for the workflow
     inputs:
       proxy_name:
         description: The name of the API proxy to deploy
@@ -33,7 +29,10 @@ on:
         required: false
         default: 'ubuntu-latest'
         type: 'string'
-    # Secrets required for the workflow
+      repository:
+        description: 'The repository to checkout'
+        required: false
+        default: ${{ github.repository }}
     secrets:
       apigee_org:
         required: true
@@ -42,17 +41,13 @@ on:
       workload_identity_provider:
         required: true
 
-# Jobs defined in the workflow
 jobs:
   Deploy_Apigee_Proxy:
     name: "Deploy API"
-    # Use the runner specified in the input, default to ubuntu-latest
     runs-on: ${{ inputs.runner }}
-    # Set permissions for the job
     permissions:
       contents: read
       id-token: write
-    # Environment variables used across steps
     env:
       APIGEE_ORG: ${{ secrets.apigee_org }}
       APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
@@ -60,35 +55,30 @@ jobs:
       APIGEE_TEST_ENV: ${{ inputs.test_env }}
       APIGEE_UAT_ENV: ${{ inputs.uat_env }}
 
-    # Steps to execute in the job
     steps:
-      # Check out the repository code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
 
-      # Authenticate to Google Cloud using Workload Identity Federation
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc '
-          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
+          workload_identity_provider: ${{ secrets.workload_identity_provider }}
+          service_account: ${{ secrets.service_account }}
 
-      # Set up the Google Cloud SDK
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      # Create a zip file of the API proxy bundle
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy-directory }}
 
-      # Authenticate to GCP and get an access token
       - name: Authenticate to GCP
         id: auth
         run: |
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
-      # Upload the API Proxy bundle to Apigee
       - name: Upload API Proxy Bundle
         id: upload
         env:
@@ -107,14 +97,12 @@ jobs:
           revision=$(echo "$response" | jq --raw-output .revision)
           echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
-      # Deploy the API to the Dev environment and validate the deployment
       - name: Deploy to Dev Environment and Validate Revision
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_ENV: ${{ inputs.dev_env }}
           APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
         run: |
-          # Deploy the API
           curl -X POST \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
@@ -122,7 +110,6 @@ jobs:
           echo "Waiting for deployment to complete..."
           sleep 60
 
-          # Retry loop to check deployment status
           max_retries=5
           retry_count=0
           while [ $retry_count -lt $max_retries ]; do
@@ -148,7 +135,6 @@ jobs:
           echo "Deployment validation failed after $max_retries retries!"
           exit 1
 
-      # Additional validation step for the deployment state in Dev environment
       - name: Validate Deployment State in Dev Environment
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
