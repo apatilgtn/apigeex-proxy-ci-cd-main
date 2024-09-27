@@ -98,14 +98,25 @@ jobs:
           APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
         run: |
           echo "Validating $APIGEE_PROXY_NAME in $APIGEE_ENV"
-          response=$(curl -s -X GET \
+          response=$(curl -s -w "\n%{http_code}" -X GET \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/deployments")
-          echo "Validation response: $response"
-          if [[ "$response" == *'"state":"ACTIVE"'* ]]; then
+    
+          http_code=$(tail -n1 <<< "$response")
+          content=$(sed '$ d' <<< "$response")
+    
+          echo "HTTP Status Code: $http_code"
+          echo "Response Content: $content"
+    
+          if [ $http_code -ne 200 ]; then
+            echo "API request failed with HTTP code $http_code"
+            exit 1
+          fi
+    
+          if [[ "$content" == *'"state":"ACTIVE"'* ]]; then
             echo "Deployment successful!"
-          else
-            echo "Deployment failed!"
+            else
+            echo "Deployment not in ACTIVE state!"
             exit 1
           fi
       - name: Deploy to Test environment
