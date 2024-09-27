@@ -115,7 +115,7 @@ jobs:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
           MAX_RETRIES=10
-          RETRY_INTERVAL=15  # Time to wait (in seconds) between retries
+          RETRY_INTERVAL=35  # Time to wait (in seconds) between retries
           COUNTER=0
 
           # Loop to check the deployment status up to a maximum number of retries
