@@ -117,7 +117,7 @@ jobs:
         run: |
           VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
           --org "$APIGEE_ORG" \
-          --env "$APIGEE_DEV_ENV" \
+          --environment  "$APIGEE_DEV_ENV" \
           --name "${{ secrets.APIGEE_PROXY_NAME }}" \
           --rev "${{ steps.upload.outputs.apigee-revision }}" \
           --token "${{ steps.auth.outputs.access_token }}")
