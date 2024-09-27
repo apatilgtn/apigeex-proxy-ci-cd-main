@@ -10,7 +10,7 @@ on:
 
 jobs:
   API_Proxy_Deployment:
-    uses: ./.github/workflows/Reusable_proxy_deploy.yml
+    uses: ./.github/workflows/Reusable-proxy-deploy.yml
     with:
       proxy_name: 'WeatherForecastAPI'  # Replace with your proxy name or dynamically pass it
       dev_env: 'dev'  # Development environment
