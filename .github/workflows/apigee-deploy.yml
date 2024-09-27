@@ -20,5 +20,5 @@ jobs:
       proxy-directory: 'apiproxy'
     secrets:
       apigee_org: ${{ secrets.APIGEE_ORG }}  # Pass the secret to the reusable workflow
-      google_credentials: ${{ secrets.GOOGLE_CREDENTIALS }}  # Pass the secret to the reusable workflow
+      google_credentials: ${{ secrets.GCP_CREDENTIALS }}  # Pass the secret to the reusable workflow
       service_account: ${{ secrets.SERVICE_ACCOUNT }}  # Pass the secret to the reusable workflow
