@@ -102,43 +102,43 @@ jobs:
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
       - name: Validate Deployment State
-  env:
-    APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-    APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}  # Updated to use APIGEE_DEV_ENV
-  run: |
-    VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
-    --org "$APIGEE_ORG" \
-    --env "$APIGEE_DEV_ENV" \
-    --name "${{ secrets.APIGEE_PROXY_NAME }}" \
-    --rev "${{ steps.deploy.outputs.revision }}" \
-    --token "${{ steps.auth.outputs.access_token }}")
+        env:
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}  # Updated to use APIGEE_DEV_ENV
+          run: |
+            VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
+            --org "$APIGEE_ORG" \
+            --env "$APIGEE_DEV_ENV" \
+            --name "${{ secrets.APIGEE_PROXY_NAME }}" \
+            --rev "${{ steps.deploy.outputs.revision }}" \
+            --token "${{ steps.auth.outputs.access_token }}")
 
-    echo "Validation Output: $VALIDATION_OUTPUT"
+            echo "Validation Output: $VALIDATION_OUTPUT"
     
-    if echo "$VALIDATION_OUTPUT" | grep -q '"state": "deployed"'; then
-      echo "Deployment state validated successfully!"
-    else
-      echo "Deployment validation failed!"
-      exit 1
-    fi
+            if echo "$VALIDATION_OUTPUT" | grep -q '"state": "deployed"'; then
+            echo "Deployment state validated successfully!"
+              else
+              echo "Deployment validation failed!"
+              exit 1
+            fi
 
-    - name: Validate API Proxy Endpoint
-      env:
-        APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}  # Use APIGEE_DEV_ENV consistently
-        APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
-        run: |
-          BASE_URL="https://$APIGEE_DEV_ENV-$APIGEE_ORG.apigee.net/${APIGEE_PROXY_NAME}"
+      - name: Validate API Proxy Endpoint
+        env:
+          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}  # Use APIGEE_DEV_ENV consistently
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+          APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
+          run: |
+            BASE_URL="https://$APIGEE_DEV_ENV-$APIGEE_ORG.apigee.net/${APIGEE_PROXY_NAME}"
     
-          # Make a test request to the deployed API
-          RESPONSE=$(curl --fail -X GET "$BASE_URL" --write-out '%{http_code}' --silent --output /dev/null)
+            # Make a test request to the deployed API
+            RESPONSE=$(curl --fail -X GET "$BASE_URL" --write-out '%{http_code}' --silent --output /dev/null)
         
-          if [ "$RESPONSE" -eq 200 ]; then
+            if [ "$RESPONSE" -eq 200 ]; then
                 echo "API proxy endpoint is accessible and returned HTTP 200!"
                 else
                         echo "API proxy endpoint validation failed with status code: $RESPONSE"
                 exit 1
-          fi
+            fi
 
       - name: Deploy to Test environment
         if: ${{ github.event_name == 'workflow_dispatch' }}
