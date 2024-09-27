@@ -54,8 +54,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
-          service_account: ${{ secrets.service_account }}
+          workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc '
+          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
       - name: Create API bundle
