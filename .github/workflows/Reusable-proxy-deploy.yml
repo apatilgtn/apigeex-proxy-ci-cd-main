@@ -107,14 +107,42 @@ jobs:
           revision=$(echo "$response" | jq --raw-output .revision)
           echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
-      - name: Deploy Revision
+      - name: Validate Deployment State
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        # Deploy the uploaded revision to the development environment.
+          APIGEE_DEV_ENV: ${{ inputs.dev_env }}
+          APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -X POST \
-          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+          MAX_RETRIES=10
+          RETRY_INTERVAL=15  # Time to wait (in seconds) between retries
+          COUNTER=0
+
+          # Loop to check the deployment status up to a maximum number of retries
+          while [ $COUNTER -lt $MAX_RETRIES ]; do
+            # Use curl to call the Apigee Management API to check the deployment status
+            VALIDATION_OUTPUT=$(curl -s -X GET \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
+
+            echo "Validation Output: $VALIDATION_OUTPUT"
+
+            # Check if the state is 'READY' in the response.
+            if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
+              echo "Deployment state validated successfully!"
+              exit 0
+            elif echo "$VALIDATION_OUTPUT" | grep -q '"state": "PROGRESSING"'; then
+              echo "Deployment is still in progress... waiting for $RETRY_INTERVAL seconds before rechecking."
+              COUNTER=$((COUNTER+1))
+              sleep $RETRY_INTERVAL
+            else
+              echo "Deployment validation failed or unexpected state!"
+              exit 1
+            fi
+          done
+
+          echo "Deployment did not reach READY state within the retry limit."
+          exit 1
 
       - name: Validate Deployment State
         env:
