@@ -35,6 +35,7 @@ on:
         required: true
       workload_identity_provider:
         required: true
+
 jobs:
   Deploy_Apigee_Proxy:
     name: "Deploy API"
@@ -51,13 +52,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/1039037619425/locations/global/workloadIdentityPools/github-actions/providers/github-actions-oidc '
           service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'
+
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
+
       - name: Set up apigeecli
         run: |
           sudo apt-get update
@@ -69,13 +73,16 @@ jobs:
           sudo mv ./apigeecli_v2.4.3_Linux_x86_64/apigeecli /usr/local/bin/
           sudo chmod +x /usr/local/bin/apigeecli
           apigeecli --version
+
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy-directory }}
+
       - name: Authenticate to GCP
         id: auth
         run: |
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
       - name: Upload API Proxy Bundle
         id: upload
         env:
@@ -94,6 +101,7 @@ jobs:
           revision=$(echo "$response" | jq --raw-output .revision)
 
           echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
+
       - name: Deploy Revision
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
@@ -101,44 +109,45 @@ jobs:
           curl -X POST \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+
       - name: Validate Deployment State
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}  # Updated to use APIGEE_DEV_ENV
-          run: |
-            VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
-            --org "$APIGEE_ORG" \
-            --env "$APIGEE_DEV_ENV" \
-            --name "${{ secrets.APIGEE_PROXY_NAME }}" \
-            --rev "${{ steps.deploy.outputs.revision }}" \
-            --token "${{ steps.auth.outputs.access_token }}")
+          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}
+        run: |
+          VALIDATION_OUTPUT=$(apigeecli apis getdeployment \
+          --org "$APIGEE_ORG" \
+          --env "$APIGEE_DEV_ENV" \
+          --name "${{ secrets.APIGEE_PROXY_NAME }}" \
+          --rev "${{ steps.upload.outputs.apigee-revision }}" \
+          --token "${{ steps.auth.outputs.access_token }}")
 
-            echo "Validation Output: $VALIDATION_OUTPUT"
-    
-            if echo "$VALIDATION_OUTPUT" | grep -q '"state": "deployed"'; then
+          echo "Validation Output: $VALIDATION_OUTPUT"
+  
+          if echo "$VALIDATION_OUTPUT" | grep -q '"state": "deployed"'; then
             echo "Deployment state validated successfully!"
-              else
-              echo "Deployment validation failed!"
-              exit 1
-            fi
+          else
+            echo "Deployment validation failed!"
+            exit 1
+          fi
 
       - name: Validate API Proxy Endpoint
         env:
-          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}  # Use APIGEE_DEV_ENV consistently
+          APIGEE_DEV_ENV: ${{ secrets.APIGEE_DEV_ENV }}
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_PROXY_NAME: ${{ secrets.APIGEE_PROXY_NAME }}
-          run: |
-            BASE_URL="https://$APIGEE_DEV_ENV-$APIGEE_ORG.apigee.net/${APIGEE_PROXY_NAME}"
-    
-            # Make a test request to the deployed API
-            RESPONSE=$(curl --fail -X GET "$BASE_URL" --write-out '%{http_code}' --silent --output /dev/null)
-        
-            if [ "$RESPONSE" -eq 200 ]; then
-                echo "API proxy endpoint is accessible and returned HTTP 200!"
-                else
-                        echo "API proxy endpoint validation failed with status code: $RESPONSE"
-                exit 1
-            fi
+        run: |
+          BASE_URL="https://$APIGEE_DEV_ENV-$APIGEE_ORG.apigee.net/${APIGEE_PROXY_NAME}"
+  
+          # Make a test request to the deployed API
+          RESPONSE=$(curl --fail -X GET "$BASE_URL" --write-out '%{http_code}' --silent --output /dev/null)
+      
+          if [ "$RESPONSE" -eq 200 ]; then
+            echo "API proxy endpoint is accessible and returned HTTP 200!"
+          else
+            echo "API proxy endpoint validation failed with status code: $RESPONSE"
+            exit 1
+          fi
 
       - name: Deploy to Test environment
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -146,7 +155,8 @@ jobs:
           echo "Deploying $APIGEE_PROXY_NAME to $APIGEE_TEST_ENV"
           curl -X POST \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_TEST_ENV/apis/$APIGEE_PROXY_NAME/revisions/$APIGEE_REVISION/deployments?override=true"
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_TEST_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+
       - name: Validate Test deployment
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
@@ -161,13 +171,15 @@ jobs:
             echo "Deployment failed!"
             exit 1
           fi
+
       - name: Deploy to UAT environment
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           echo "Deploying $APIGEE_PROXY_NAME to $APIGEE_UAT_ENV"
           curl -X POST \
             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_UAT_ENV/apis/$APIGEE_PROXY_NAME/revisions/$APIGEE_REVISION/deployments?override=true"
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_UAT_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+
       - name: Validate UAT deployment
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
