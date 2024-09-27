@@ -32,6 +32,7 @@ on:
       repository:
         description: 'The repository to checkout'
         required: false
+        type: 'string'
         default: ${{ github.repository }}
     secrets:
       apigee_org:
