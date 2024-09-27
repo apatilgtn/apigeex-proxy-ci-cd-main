@@ -1,69 +1,24 @@
-name: proxy-ci  # Descriptive workflow name
+name: Apigee Proxy Deployment
 
 on:
   push:
-    branches: [ main ]  # Only trigger on pushes to the main branch
+    branches: [ main ]  # Trigger on push to the main branch
     paths:
-      - '.github/workflows/apigee-deploy.yml'  # Trigger if workflow file changes
-      - 'src/**'  # Trigger if any files in src directory change
+      - 'src/**'  # Trigger when code in the src directory changes
+      - 'apiproxy/**'
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
-  build:  # Job name
-    name: "Deploy To Dev"  # Descriptive job name
-    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
-
-    permissions:
-      contents: read  # Read access to repository content
-      id-token: write  # Write access to identify the user
-
-    steps:
-      - uses: actions/checkout@v4  # Checkout the repository code
-
-      # Use pre-built `setup-gcloud` action for authentication
-      - uses: google-github-actions/auth@v2
-        with:
-          token_format: access_token
-          create_credentials_file: true
-          activate_credentials_file: true
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-          service_account: 'github-actions-workflow@vital-scout-430808-k8.iam.gserviceaccount.com'  # Properly formatted service account email
-
-      - uses: google-github-actions/setup-gcloud@v1  # Set up Google Cloud SDK
-
-      - name: Create API bundle
-        run: zip -r proxy.zip apiproxy  # Bundle the API proxy directory
-
-      - name: Authenticate to GCP
-        id: auth
-        run: |
-           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
-           echo "::set-output name=access_token::$ACCESS_TOKEN"
-
-
-      - name: Upload API Proxy Bundle
-        id: upload
-        env:
-           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-        run: |  # Multi-line command with output capture
-          response=$(curl --fail -X POST \
-            -H "Content-Type: multipart/form-data" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -F "file=@proxy.zip" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=hello-world" \
-            --silent)
-
-            
-          echo "APIgee Response: $response"
-          revision=$(echo "$response" | jq --raw-output .revision)
-          echo "::set-output name=apigee-revision::$revision"
-
-      - name: Deploy Revision # Deploy the uploaded revision to dev environment
-        run: |  # Multi-line command with access token reference
-          #curl --fail -v -X POST \
-          #-H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          #"https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/hello-world/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
-          curl -X POST \
-          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/dev/apis/hello-world/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
-           
+  API_Proxy_Deployment:
+    uses: ./.github/workflows/Reusable_proxy_deploy.yml
+    with:
+      proxy_name: 'WeatherForecastAPI'  # Replace with your proxy name or dynamically pass it
+      dev_env: 'dev'  # Development environment
+      test_env: 'test'  # Testing environment
+      uat_env: 'uat'  # UAT environment
+      #proxy-path: ''
+      proxy-directory: 'apiproxy'
+    secrets:
+      apigee_org: ${{ secrets.APIGEE_ORG }}  # Pass the secret to the reusable workflow
+      google_credentials: ${{ secrets.GOOGLE_CREDENTIALS }}  # Pass the secret to the reusable workflow
+      service_account: ${{ secrets.SERVICE_ACCOUNT }}  # Pass the secret to the reusable workflow
