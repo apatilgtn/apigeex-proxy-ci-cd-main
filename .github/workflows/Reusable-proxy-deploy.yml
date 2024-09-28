@@ -98,11 +98,31 @@ jobs:
           ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
           WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
 
+          ERROR_DETAILS=$(jq -r '[.[] | select(.severity == "Error") | {name, message, file}] | (["File", "Error", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
+          WARNING_DETAILS=$(jq -r '[.[] | select(.severity == "Warning") | {name, message, file}] | (["File", "Warning", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
+
           echo "Linting Complete: Errors - $ERRORS, Warnings - $WARNINGS"
+          echo "Detailed results saved to linting-results.json"
+
+          echo -e "\n\n## Linting Summary"
+          echo -e "| Severity   | Count |"
+          echo -e "|------------|-------|"
+          echo -e "| Errors     | $ERRORS |"
+          echo -e "| Warnings   | $WARNINGS |"
+
+          echo -e "\n### Error Details:"
+          echo -e "| File       | Error | Message |"
+          echo -e "|------------|-------|---------|"
+          echo -e "$ERROR_DETAILS"
+
+          echo -e "\n### Warning Details:"
+          echo -e "| File       | Warning | Message |"
+          echo -e "|------------|---------|---------|"
+          echo -e "$WARNING_DETAILS"
+
           if [ $ERRORS -gt 0 ]; then
-            echo "Linting errors found. Check the detailed results."
+            echo "Linting errors found. Check the detailed results above."
             exit 1
-          fi
 
       - name: Save detailed linting results
         uses: actions/upload-artifact@v3
@@ -110,13 +130,32 @@ jobs:
           name: detailed-linting-results
           path: linting-results.json
 
+      - name: Display Deployed Proxies and Revisions
+        run: |
+          echo "Fetching deployed proxies and their revisions..."
+          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+          
+          deployments=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" \
+            | jq -r '.deployments[] | {proxy: .apiProxy, revision: .revision}')
+
+          echo -e "\n## Deployed Proxies and Revisions"
+          echo "| Proxy Name | Revision |"
+          echo "|------------|----------|"
+          echo "$deployments" | jq -r '. | "\(.proxy) | \(.revision)"' | while IFS= read -r line; do
+            echo "| $line |"
+          done
+
       - name: Delete Older Revisions (Keep Last 3)
         run: |
           echo "Deleting older revisions, keeping the last 3..."
+          # Install jq if not already installed
           sudo apt-get install -y jq
 
+          # Authenticate and get access token
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
 
+          # Fetch all revisions of the API proxy
           revisions=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" \
             | jq -r '.revisions[]' | sort -n)
@@ -126,12 +165,22 @@ jobs:
           if [ "$revision_count" -le 3 ]; then
             echo "Only $revision_count revisions found. No need to delete any revisions."
           else
+            # Get the current deployed revision
             current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
               "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
               jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
 
-            revisions_to_delete=$(echo "$revisions" | grep -v -F "$current_revision" | head -n -3)
+            # Ensure the current revision is included in the last 3 revisions to keep
+            revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "$current_revision")
+            if [ -n "$revisions_to_keep" ]; then
+              revisions_to_keep="$revisions_to_keep"$'\n'"$current_revision"
+            else
+              revisions_to_keep="$current_revision"
+            fi
 
+            revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
+
+            deleted_count=0
             for rev in $revisions_to_delete; do
               echo "Deleting revision $rev of proxy $APIGEE_PROXY_NAME"
               delete_response=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -139,16 +188,31 @@ jobs:
 
               if [ "$delete_response" -eq 200 ]; then
                 echo "Revision $rev deleted successfully."
+                deleted_count=$((deleted_count + 1))
               else
                 echo "Failed to delete revision $rev. HTTP status code: $delete_response"
               fi
             done
           fi
+          echo "Older revisions cleanup completed."
+
+          # Display summary
+          echo -e "\n## Deleted Revisions Summary"
+          echo "| Total Revisions | Deleted Revisions |"
+          echo "|-----------------|-------------------|"
+          echo "| $revision_count | $deleted_count    |"
 
       - name: Upload API Proxy Bundle
         id: upload
         run: |
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+          current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
+            jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
+
+          echo "Current deployed revision: $current_revision"
+          echo "current-revision=$current_revision" >> $GITHUB_OUTPUT
+
           response=$(curl --fail -X POST \
             -H "Content-Type: multipart/form-data" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -165,12 +229,44 @@ jobs:
         run: |
           echo "Deploying to Development Environment: ${{ inputs.dev_env }}"
           curl -X POST \
-            -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+          -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+
+          sleep 30
+          retries=0
+          while [[ $retries -lt 5 ]]; do
+            state=$(curl -s -X GET \
+              -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments" \
+              | jq -r '.state')
+
+            if [ "$state" == "READY" ]; then
+              echo "Deployment successful and validated!"
+              echo "deployment-state=$state" >> $GITHUB_OUTPUT
+              break
+            fi
+
+            sleep 30
+            retries=$((retries+1))
+          done
+
+          if [ "$state" != "READY" ]; then
+            echo "Deployment validation failed!"
+            echo "deployment-state=FAILED" >> $GITHUB_OUTPUT
+            exit 1
 
       - name: Generate Deployment Summary
         run: |
+          LINT_ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
+          LINT_WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
+
+          echo "| Step                | Result           | Details |"
+          echo "|---------------------|------------------|---------|"
+          echo "| Linting Analysis    | Errors: $LINT_ERRORS |         |"
+          echo "| Linting Analysis    | Warnings: $LINT_WARNINGS |       |"
+          echo "| Proxy Deployment    | ${{ steps.deploy.outputs.deployment-state }} | Validated |"
+
           echo -e "\n## Deployment Version Information"
           echo "| Proxy Name | Old Version | New Version | Status |"
           echo "|------------|-------------|-------------|--------|"
-          echo "| ${{ inputs.proxy_name }} | ${{ steps.upload.outputs.current-revision }} | ${{ steps.upload.outputs.apigee-revision }} | READY |"
+          echo "| ${{ inputs.proxy_name }} | ${{ steps.upload.outputs.current-revision }} | ${{ steps.upload.outputs.apigee-revision }} | ${{ steps.deploy.outputs.deployment-state }} |"
