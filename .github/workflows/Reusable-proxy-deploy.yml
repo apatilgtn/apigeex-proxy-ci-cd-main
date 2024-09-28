@@ -134,39 +134,7 @@ jobs:
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
 
-      - name: Delete Older Revisions (Keep Last 3)
-        run: |
-          echo "Deleting older revisions, keeping the last 3..."
-          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
-          
-          revisions=$(curl -s -X GET \
-        -H "Authorization: Bearer $ACCESS_TOKEN" \
-        "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" \
-        | jq -r '.revisions[]' | sort -n)
-
-          revision_count=$(echo "$revisions" | wc -l)
-
-          if [ "$revision_count" -le 3 ]; then
-            echo "Only $revision_count revisions found. No need to delete any revisions."
-          else
-            revisions_to_delete=$(echo "$revisions" | head -n -3)
-
-            deleted_count=0
-            for rev in $revisions_to_delete; do
-              echo "Deleting revision $rev of proxy $APIGEE_PROXY_NAME"
-              curl -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
-                "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions/$rev"
-              echo "Revision $rev deleted successfully."
-              deleted_count=$((deleted_count + 1))
-            done
-          fi
-          echo "Older revisions cleanup completed."
-
-          # Display the output in a table
-          echo -e "\n## Deleted Revisions Summary"
-          echo "| Total Revisions | Deleted Revisions |"
-          echo "|-----------------|-------------------|"
-          echo "| $revision_count | $deleted_count    |"
+     
 
       - name: Upload API Proxy Bundle
         id: upload
