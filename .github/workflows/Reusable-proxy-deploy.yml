@@ -94,12 +94,35 @@ jobs:
         run: |
           echo "Starting apigeelint analysis..."
           apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10 > linting-results.json
+
+          # Count Errors and Warnings
           ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
           WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
           
+          # Extract Detailed Error and Warning Information
+          ERROR_DETAILS=$(jq -r '[.[] | select(.severity == "Error") | {name, message, file}] | (["File", "Error", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
+          WARNING_DETAILS=$(jq -r '[.[] | select(.severity == "Warning") | {name, message, file}] | (["File", "Warning", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
+
           echo "Linting Complete: Errors - $ERRORS, Warnings - $WARNINGS"
           echo "Detailed results saved to linting-results.json"
           
+          # Create a Formatted Table for Errors and Warnings
+          echo -e "\n\n## Linting Summary"
+          echo -e "| Severity   | Count |"
+          echo -e "|------------|-------|"
+          echo -e "| Errors     | $ERRORS |"
+          echo -e "| Warnings   | $WARNINGS |"
+          
+          echo -e "\n### Error Details:"
+          echo -e "| File       | Error | Message |"
+          echo -e "|------------|-------|---------|"
+          echo -e "$ERROR_DETAILS"
+
+          echo -e "\n### Warning Details:"
+          echo -e "| File       | Warning | Message |"
+          echo -e "|------------|---------|---------|"
+          echo -e "$WARNING_DETAILS"
+
           if [ $ERRORS -gt 0 ]; then
             echo "Linting errors found. Check the detailed results above."
             exit 1
