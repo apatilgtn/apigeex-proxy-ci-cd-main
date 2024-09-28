@@ -160,9 +160,12 @@ jobs:
           # Fetch all revisions of the API proxy
           revisions=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" \
-            | jq -r '.revision[]' | sort -n)
+            | jq -r '.revisions[]' | sort -n) # Changed '.revision[]' to '.revisions[]'
 
           revision_count=$(echo "$revisions" | wc -l)
+
+          echo "Total revisions found: $revision_count"
+          echo "Revisions: $revisions"
 
           if [ "$revision_count" -le 3 ]; then
             echo "Only $revision_count revisions found. No need to delete any revisions."
@@ -172,16 +175,23 @@ jobs:
               "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
               jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
 
+            echo "Current deployed revision: $current_revision"
+
             # Ensure the current revision is included in the last 3 revisions to keep
             revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "$current_revision")
             
             if [ -n "$revisions_to_keep" ]; then
-              revisions_to_keep="$revisions_to_keep"$'\n'"$current_revision"
+              revisions_to_keep=$(echo "$revisions_to_keep"$'\n'"$current_revision" | sort -n | uniq)
             else
               revisions_to_keep="$current_revision"
             fi
 
+            echo "Revisions to keep: $revisions_to_keep"
+
+            # Calculate revisions to delete
             revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
+
+            echo "Revisions to delete: $revisions_to_delete"
 
             deleted_count=0
             for rev in $revisions_to_delete; do
@@ -205,6 +215,7 @@ jobs:
           echo "| Total Revisions | Deleted Revisions |"
           echo "|-----------------|-------------------|"
           echo "| $revision_count | $deleted_count    |"
+
 
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
