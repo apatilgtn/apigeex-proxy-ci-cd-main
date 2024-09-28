@@ -123,7 +123,6 @@ jobs:
           if [ $ERRORS -gt 0 ]; then
             echo "Linting errors found. Check the detailed results above."
             exit 1
-          fi
 
       - name: Save detailed linting results
         uses: actions/upload-artifact@v3
@@ -157,28 +156,20 @@ jobs:
           # Authenticate and get access token
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
 
-          # Fetch all revisions of the API proxy and log raw JSON for debugging
+          # Fetch all revisions of the API proxy
           echo "Fetching revisions for proxy: $APIGEE_PROXY_NAME"
           raw_revisions_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions")
 
           echo "Raw revisions response: $raw_revisions_response"
 
-          # Check if the response is a valid JSON
-          if ! echo "$raw_revisions_response" | jq .; then
-            echo "Error: The revisions response is not valid JSON."
-            exit 1
-          fi
-
-          # Try to extract revisions from the JSON response
-          revisions=$(echo "$raw_revisions_response" | jq -r 'if type=="object" and .revision then .revision[] else empty end' | sort -n)
+          # Use jq to directly extract the array of revisions
+          revisions=$(echo "$raw_revisions_response" | jq -r '.[]' | sort -n)
           
-          # Debug output to understand the issue
+          # Debug output to check extracted revisions
           echo "Extracted revisions: $revisions"
           if [ -z "$revisions" ]; then
             echo "Error: Could not extract revisions. Please check the JSON structure."
-            echo "Parsed JSON structure:"
-            echo "$raw_revisions_response" | jq .
             exit 1
           fi
 
@@ -199,15 +190,9 @@ jobs:
 
           echo "Raw deployment response: $raw_deployment_response"
 
-          # Verify the deployment response structure
-          if ! echo "$raw_deployment_response" | jq .; then
-            echo "Error: The deployment response is not valid JSON."
-            exit 1
-          fi
-
           # Extract the current deployed revision
           current_revision=$(echo "$raw_deployment_response" | \
-            jq -r --arg PROXY "$APIGEE_PROXY_NAME" 'if type=="object" and .deployments then .deployments[] | select(.apiProxy == $PROXY) | .revision else empty end')
+            jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
 
           if [ -z "$current_revision" ]; then
             echo "Error: Could not find the current deployed revision for proxy $APIGEE_PROXY_NAME."
@@ -249,6 +234,7 @@ jobs:
 
           echo "Older revisions cleanup completed."
           echo "Deleted $deleted_count out of $((revision_count - 3)) old revisions."
+
 
 
 
