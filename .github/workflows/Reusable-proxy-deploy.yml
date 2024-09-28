@@ -74,7 +74,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16'
+          node-version: '20'
 
       - name: Cache node modules
         uses: actions/cache@v3
@@ -146,6 +146,62 @@ jobs:
           echo "$deployments" | jq -r '. | "\(.proxy) | \(.revision)"' | while IFS= read -r line; do
             echo "| $line |"
           done
+
+      - name: Delete Older Revisions (Keep Last 3)
+        run: |
+          echo "Deleting older revisions, keeping the last 3..."
+          # Install jq if not already installed
+          sudo apt-get install -y jq
+  
+          # Authenticate and get access token
+          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+  
+          # Fetch all revisions of the API proxy
+          revisions=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" \
+          | jq -r '.revisions[]' | sort -n)
+
+          revision_count=$(echo "$revisions" | wc -l)
+
+          if [ "$revision_count" -le 3 ]; then
+            echo "Only $revision_count revisions found. No need to delete any revisions."
+          else
+            # Get the current deployed revision
+            current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
+              jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
+
+            # Ensure the current revision is included in the last 3 revisions to keep
+            revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "$current_revision")
+            if [ -n "$revisions_to_keep" ]; then
+              revisions_to_keep="$revisions_to_keep"$'\n'"$current_revision"
+            else
+              revisions_to_keep="$current_revision"
+            fi
+
+            revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
+
+            deleted_count=0
+            for rev in $revisions_to_delete; do
+              echo "Deleting revision $rev of proxy $APIGEE_PROXY_NAME"
+              delete_response=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
+                "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions/$rev")
+
+              if [ "$delete_response" -eq 200 ]; then
+                echo "Revision $rev deleted successfully."
+                deleted_count=$((deleted_count + 1))
+              else
+                echo "Failed to delete revision $rev. HTTP status code: $delete_response"
+              fi
+            done
+          fi
+          echo "Older revisions cleanup completed."
+
+          # Display summary
+          echo -e "\n## Deleted Revisions Summary"
+          echo "| Total Revisions | Deleted Revisions |"
+          echo "|-----------------|-------------------|"
+          echo "| $revision_count | $deleted_count    |"
 
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
