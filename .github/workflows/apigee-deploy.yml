@@ -1,27 +1,54 @@
-name: Apigee Proxy Deployment
 
-on:
-  push:
-    branches: [ main ]  # Trigger on push to the main branch
-    paths:
-      - 'src/**'  # Trigger when code in the src directory changes
-      - 'apiproxy/**'
-  workflow_dispatch:  # Allow manual triggering
 
-jobs:
-  API_Proxy_Deployment:
-    uses: ./.github/workflows/Reusable-proxy-deploy.yml
-    permissions:
-      contents: read
-      id-token: write 
-    with:
-      proxy_name: 'WeatherForecastAPI'  # Replace with your proxy name or dynamically pass it
-      dev_env: 'dev'  # Development environment
-      test_env: 'test'  # Testing environment
-      uat_env: 'uat'  # UAT environment
-      #proxy-path: ''
-      proxy-directory: 'apiproxy'
-    secrets:
-      apigee_org: ${{ secrets.APIGEE_ORG }}  # Pass the secret here directly
-      workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}
-      service_account: ${{ secrets.SERVICE_ACCOUNT }}
+      # Workflow Name: Apigee Proxy Deployment
+      # This workflow triggers on pushes to the main branch or can be manually triggered.
+      
+      name: Apigee Proxy Deployment
+      
+      on:
+        push:
+          branches: [ main ]  # Trigger on pushes to the main branch.
+          paths:  # Only trigger if certain paths are changed.
+            - 'src/**'  # Files in the 'src' directory.
+            - 'apiproxy/**'  # Files in the 'apiproxy' directory.
+        workflow_dispatch:  # Allow manual triggering of the workflow.
+      
+      jobs:
+        setup_and_auth:
+          runs-on: ubuntu-latest  # Use the latest Ubuntu runner for this job.
+          permissions:
+            contents: read  # Read access to the repository contents.
+            id-token: write  # Write access for ID tokens.
+      
+          steps:
+            - name: Checkout code
+              uses: actions/checkout@v4  # Step to check out the code in the repository.
+      
+            - name: Authenticate to Google Cloud
+              id: auth  # ID for this step to reference outputs later.
+              uses: google-github-actions/auth@v2  # Google authentication action.
+              with:
+                token_format: 'access_token'  # Specify the token format.
+                workload_identity_provider: '${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}'  # Use a secret for the workload identity provider.
+                service_account: '${{ secrets.SERVICE_ACCOUNT }}'  # Use a secret for the service account.
+      
+            - name: Set up Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2  # Set up Google Cloud SDK for further commands.
+      
+            - name: Use gcloud CLI
+              run: gcloud info  # Run a command to show information about the gcloud setup.
+      
+        deploy_proxy:
+          needs: setup_and_auth  # This job depends on the setup_and_auth job to complete successfully.
+          uses: apatilgtn/apigeex-proxy-ci-cd-main/.github/workflows/Reusable-proxy-deploy.yml@main  # Reuse the workflow from a different repository.
+          with:
+            proxy_name: 'WeatherForecastAPI'  # Name of the API proxy to deploy.
+            dev_env: 'dev'  # Development environment name.
+            test_env: 'test'  # Testing environment name.
+            uat_env: 'uat'  # UAT environment name.
+            proxy-directory: 'apiproxy'  # Directory containing the proxy files.
+            repository: ${{ github.repository }}  # Reference the current repository name.
+          secrets:
+            apigee_org: ${{ secrets.APIGEE_ORG }}  # Apigee organization name from secrets.
+            workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_POOL_ID }}  # Workload identity provider from secrets.
+            service_account: ${{ secrets.SERVICE_ACCOUNT }}  # Service account from secrets.
