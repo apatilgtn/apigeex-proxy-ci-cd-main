@@ -1,7 +1,9 @@
 name: Reusable Apigee Proxy Deployment
 
+# This workflow is designed to be reusable across different repositories
 on:
   workflow_call:
+    # Define inputs that can be passed when calling this workflow
     inputs:
       proxy_name:
         description: The name of the API proxy to deploy
@@ -34,6 +36,7 @@ on:
         required: false
         type: string
         default: ${{ github.repository }}
+    # Define secrets that need to be passed
     secrets:
       apigee_org:
         required: true
@@ -49,6 +52,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # Set environment variables for the job
     env:
       APIGEE_ORG: ${{ secrets.apigee_org }}
       APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
@@ -57,25 +61,30 @@ jobs:
       APIGEE_UAT_ENV: ${{ inputs.uat_env }}
 
     steps:
+      # Step 1: Checkout the code from the repository
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
 
+      # Step 2: Authenticate to Google Cloud
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.workload_identity_provider }}
           service_account: ${{ secrets.service_account }}
 
+      # Step 3: Set up Google Cloud SDK
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      # Step 4: Install Node.js
       - name: Install Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
+      # Step 5: Cache node modules for faster builds
       - name: Cache node modules
         uses: actions/cache@v3
         with:
@@ -84,23 +93,29 @@ jobs:
           restore-keys: |
             ${{ runner.OS }}-node-
 
+      # Step 6: Install jq for JSON processing
       - name: Install jq
         run: sudo apt-get install -y jq
 
+      # Step 7: Install apigeelint for linting Apigee proxies
       - name: Install apigeelint
         run: npm install -g apigeelint@2.16.0
 
+      # Step 8: Run apigeelint and process results
       - name: Run apigeelint
         run: |
           echo "Starting apigeelint analysis..."
           apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10 > linting-results.json
 
+          # Count errors and warnings
           ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
           WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
 
+          # Format error and warning details
           ERROR_DETAILS=$(jq -r '[.[] | select(.severity == "Error") | {name, message, file}] | (["File", "Error", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
           WARNING_DETAILS=$(jq -r '[.[] | select(.severity == "Warning") | {name, message, file}] | (["File", "Warning", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
 
+          # Output linting summary and details
           echo "Linting Complete: Errors - $ERRORS, Warnings - $WARNINGS"
           echo "Detailed results saved to linting-results.json"
 
@@ -120,17 +135,20 @@ jobs:
           echo -e "|------------|---------|---------|"
           echo -e "$WARNING_DETAILS"
 
+          # Exit with error if there are linting errors
           if [ $ERRORS -gt 0 ]; then
             echo "Linting errors found. Check the detailed results above."
             exit 1
           fi  
 
+      # Step 9: Save detailed linting results as an artifact
       - name: Save detailed linting results
         uses: actions/upload-artifact@v3
         with:
           name: detailed-linting-results
           path: linting-results.json
 
+      # Step 10: Display currently deployed proxies and their revisions
       - name: Display Deployed Proxies and Revisions
         run: |
           echo "Fetching deployed proxies and their revisions..."
@@ -147,6 +165,7 @@ jobs:
             echo "| $line |"
           done
 
+      # Step 11: Delete older revisions, keeping only the last 3
       - name: Delete Older Revisions (Keep Last 3)
         run: |
           echo "Starting deletion of older revisions for proxy: $APIGEE_PROXY_NAME (Keeping last 3)"
@@ -200,9 +219,11 @@ jobs:
 
           echo -e "\nOlder revisions cleanup completed."
 
+      # Step 12: Create API bundle
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
 
+      # Step 13: Upload API Proxy Bundle
       - name: Upload API Proxy Bundle
         id: upload
         run: |
@@ -225,6 +246,7 @@ jobs:
           echo "Uploaded Proxy Revision: $revision"
           echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
+      # Step 14: Deploy and Validate in Dev Environment
       - name: Deploy and Validate in Dev Environment
         id: deploy
         run: |
@@ -233,6 +255,7 @@ jobs:
           -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
           "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
 
+          # Wait for deployment to complete and validate
           sleep 30
           retries=0
           while [[ $retries -lt 5 ]]; do
@@ -257,6 +280,7 @@ jobs:
             exit 1
           fi  
 
+      # Step 15: Generate Deployment Summary
       - name: Generate Deployment Summary
         run: |
           LINT_ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
