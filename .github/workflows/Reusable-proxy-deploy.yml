@@ -91,38 +91,21 @@ jobs:
         run: npm install -g apigeelint@2.16.0
 
       - name: Run apigeelint
+        id: linting
         run: |
           echo "Starting apigeelint analysis..."
           echo "Analyzing proxy in directory: ${{ inputs.proxy_directory }}"
-          apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10 > linting-results.json
-          echo "Apigeelint analysis complete. Results saved to linting-results.json"
-          
-          # Display detailed linting results
-          echo "Detailed Linting Results:"
-          jq -r '.[] | "Rule: \(.ruleId)\nSeverity: \(.severity)\nMessage: \(.message)\nFile: \(.filePath)\nLine: \(.lineNumber)\n"' linting-results.json
+          LINTING_OUTPUT=$(apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10)
+          echo "linting_output<<EOF" >> $GITHUB_OUTPUT
+          echo "$LINTING_OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
           
           # Count errors and warnings
-          ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
-          WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
+          ERRORS=$(echo "$LINTING_OUTPUT" | jq '[.[] | select(.severity == "Error")] | length')
+          WARNINGS=$(echo "$LINTING_OUTPUT" | jq '[.[] | select(.severity == "Warning")] | length')
           
-          echo "Summary of results:"
-          echo "Errors: $ERRORS"
-          echo "Warnings: $WARNINGS"
-          
-          if [ $ERRORS -gt 0 ]; then
-            echo "Linting errors found. Check the detailed results above."
-            exit 1
-          fi
-
-      - name: Save detailed linting results
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: detailed-linting-results
-          path: linting-results.json
-
-      - name: Check proxy directory contents
-        run: ls -la ${{ inputs.proxy_directory }}
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
 
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
@@ -149,47 +132,25 @@ jobs:
           echo "Apigee Response: $response"
 
           revision=$(echo "$response" | jq --raw-output .revision)
-          echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
+          echo "apigee_revision=$revision" >> $GITHUB_OUTPUT
 
-      - name: Deploy to Dev Environment and Validate Revision
+      - name: Deploy to Dev Environment
+        id: deploy_dev
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_ENV: ${{ inputs.dev_env }}
           APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
         run: |
-          curl -X POST \
+          DEPLOY_OUTPUT=$(curl -X POST \
           -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
-
-          echo "Waiting for deployment to complete..."
-          sleep 60
-
-          max_retries=5
-          retry_count=0
-          while [ $retry_count -lt $max_retries ]; do
-            VALIDATION_OUTPUT=$(curl -s -X GET \
-              -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
-            
-            echo "Validation Output: $VALIDATION_OUTPUT"
-            
-            if echo "$VALIDATION_OUTPUT" | jq -e '.state == "READY"' > /dev/null; then
-              echo "Deployment validated successfully!"
-              exit 0
-            elif echo "$VALIDATION_OUTPUT" | jq -e '.state == "PROGRESSING"' > /dev/null; then
-              echo "Deployment still in progress. Retrying..."
-              sleep 30
-              retry_count=$((retry_count+1))
-            else
-              echo "Deployment failed or in unexpected state!"
-              exit 1
-            fi
-          done
-
-          echo "Deployment validation failed after $max_retries retries!"
-          exit 1
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee_revision }}/deployments?override=true")
+          
+          echo "deploy_output<<EOF" >> $GITHUB_OUTPUT
+          echo "$DEPLOY_OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Validate Deployment State in Dev Environment
+        id: validate_dev
         env:
           APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
           APIGEE_DEV_ENV: ${{ inputs.dev_env }}
@@ -198,13 +159,41 @@ jobs:
         run: |
           VALIDATION_OUTPUT=$(curl -s -X GET \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee_revision }}/deployments")
 
-          echo "Validation Output: $VALIDATION_OUTPUT"
+          echo "validation_output<<EOF" >> $GITHUB_OUTPUT
+          echo "$VALIDATION_OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
           if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
-            echo "Deployment state validated successfully!"
+            echo "status=success" >> $GITHUB_OUTPUT
           else
-            echo "Deployment validation failed!"
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "## Apigee Proxy Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Linting | $([ ${{ steps.linting.outputs.errors }} -eq 0 ] && echo '✅ Pass' || echo '❌ Fail') | Errors: ${{ steps.linting.outputs.errors }}, Warnings: ${{ steps.linting.outputs.warnings }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API Bundle Upload | ✅ Success | Revision: ${{ steps.upload.outputs.apigee_revision }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deployment to Dev | $(echo '${{ steps.deploy_dev.outputs.deploy_output }}' | jq -r '.state // "N/A"') | Environment: ${{ inputs.dev_env }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validation in Dev | ${{ steps.validate_dev.outputs.status }} | $(echo '${{ steps.validate_dev.outputs.validation_output }}' | jq -r '.state // "N/A"') |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Detailed Linting Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Rule ID | Severity | Message | File | Line |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|---------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.linting.outputs.linting_output }}' | jq -r '.[] | "| \(.ruleId) | \(.severity) | \(.message) | \(.filePath) | \(.lineNumber) |"' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for failures
+        if: always()
+        run: |
+          if [ "${{ steps.validate_dev.outputs.status }}" != "success" ] || [ ${{ steps.linting.outputs.errors }} -gt 0 ]; then
+            echo "Deployment process encountered errors. Check the summary for details."
             exit 1
           fi
