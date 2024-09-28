@@ -176,27 +176,32 @@ jobs:
           revisions_to_keep="$revisions_to_keep"$'\n'"$current_revision"  # Include current revision
           revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
 
-          echo "Revisions to keep: $revisions_to_keep"
-          echo "Revisions to delete: $revisions_to_delete"
+          # Display Revisions Table Header
+          echo -e "\n### Revisions Table\n"
+          echo "| Revision | Status       | Delete Status        |"
+          echo "|----------|--------------|---------------------|"
 
-          # Delete older revisions
+          # Display revisions to keep in the table
+          for rev in $(echo "$revisions_to_keep" | sort -n); do
+            echo "| $rev      | Retained     | N/A                 |"
+          done
+
+          # Delete older revisions and capture the results
           for rev in $revisions_to_delete; do
-            echo "Deleting revision $rev..."
             response_code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
               "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions/$rev")
 
-            [ "$response_code" -eq 200 ] && echo "Revision $rev deleted successfully." || echo "Failed to delete revision $rev. Status: $response_code"
+            if [ "$response_code" -eq 200 ]; then
+              echo "| $rev      | Deleted      | Successfully deleted |"
+            else
+              echo "| $rev      | Deleted      | Failed with status $response_code |"
+            fi
           done
 
-          echo "Older revisions cleanup completed."
-
-
-
-
+          echo -e "\nOlder revisions cleanup completed."
 
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
-
 
       - name: Upload API Proxy Bundle
         id: upload
