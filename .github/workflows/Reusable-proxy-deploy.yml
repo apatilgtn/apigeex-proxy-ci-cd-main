@@ -208,47 +208,24 @@ jobs:
             echo "Deployment validation failed!"
             exit 1
           fi
-      - name: Generate Summary Table
-        if: always()
+      - name: Generate Deployment Summary
         run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Step | Status | Details |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|---------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Linting | $([ $(jq '[.[] | select(.severity == "Error")] | length' linting-results.json) -eq 0 ] && echo '✅ Pass' || echo '❌ Fail') | Errors: $(jq '[.[] | select(.severity == "Error")] | length' linting-results.json), Warnings: $(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json) |" >> $GITHUB_STEP_SUMMARY
-          echo "| API Bundle Upload | ✅ Success | Revision: ${{ steps.upload.outputs.apigee-revision }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Deployment to Dev | $(echo '${{ steps.upload.outputs.apigee-revision }}' | jq -r '.state // "N/A"') | Environment: ${{ inputs.dev_env }} |" >> $GITHUB_STEP_SUMMARY
-          
-          echo "## Detailed Linting Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Rule ID | Severity | Message | File | Line |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|----------|---------|------|------|" >> $GITHUB_STEP_SUMMARY
-          jq -r '.[] | "| \(.ruleId) | \(.severity) | \(.message) | \(.filePath) | \(.lineNumber) |"' linting-results.json >> $GITHUB_STEP_SUMMARY
+          echo "Generating deployment summary..."
 
-      - name: Send Email
-        if: always()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.EMAIL_USER }}
-          password: ${{ secrets.EMAIL_PASS }}
-          subject: Apigee Proxy Deployment Summary - ${{ inputs.proxy_name }}
-          body: file://README.md
-          to: happyanand06@gmail.com
-          from: GitHub Actions
-          content_type: text/html
-          convert_markdown: true
+          # Linting summary
+          LINT_ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
+          LINT_WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
 
-      - name: Prepare Email Content
-        if: always()
-        run: |
-          echo "## Deployment Summary" > README.md
-          echo "| Step | Status | Details |" >> README.md
-          echo "|------|--------|---------|" >> README.md
-          echo "| Linting | $([ $(jq '[.[] | select(.severity == "Error")] | length' linting-results.json) -eq 0 ] && echo '✅ Pass' || echo '❌ Fail') | Errors: $(jq '[.[] | select(.severity == "Error")] | length' linting-results.json), Warnings: $(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json) |" >> README.md
-          echo "| API Bundle Upload | ✅ Success | Revision: ${{ steps.upload.outputs.apigee-revision }} |" >> README.md
-          echo "| Deployment to Dev | $(echo '${{ steps.upload.outputs.apigee-revision }}' | jq -r '.state // "N/A"') | Environment: ${{ inputs.dev_env }} |" >> README.md
-          
-          echo "## Detailed Linting Results" >> README.md
-          echo "| Rule ID | Severity | Message | File | Line |" >> README.md
-          echo "|---------|----------|---------|------|------|" >> README.md
-          jq -r '.[] | "| \(.ruleId) | \(.severity) | \(.message) | \(.filePath) | \(.lineNumber) |"' linting-results.json >> README.md
+          # Deployment summary
+          DEPLOYMENT_STATE=$(curl -s -X GET \
+        -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+        "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments" | jq -r '.state')
+
+          # Generate table
+          echo "| Step                | Result       | Details |"
+          echo "|---------------------|--------------|---------|"
+          echo "| Linting Errors      | $LINT_ERRORS |         |"
+          echo "| Linting Warnings    | $LINT_WARNINGS |       |"
+          echo "| Deployment State    | $DEPLOYMENT_STATE |     |"
+
+          echo "Deployment summary generated."
