@@ -93,21 +93,12 @@ jobs:
       - name: Run apigeelint
         run: |
           echo "Starting apigeelint analysis..."
-          echo "Analyzing proxy in directory: ${{ inputs.proxy_directory }}"
           apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10 > linting-results.json
-          echo "Apigeelint analysis complete. Results saved to linting-results.json"
-          
-          # Display detailed linting results
-          echo "Detailed Linting Results:"
-          jq -r '.[] | "Rule: \(.ruleId)\nSeverity: \(.severity)\nMessage: \(.message)\nFile: \(.filePath)\nLine: \(.lineNumber)\n"' linting-results.json
-          
-          # Count errors and warnings
           ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
           WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
           
-          echo "Summary of results:"
-          echo "Errors: $ERRORS"
-          echo "Warnings: $WARNINGS"
+          echo "Linting Complete: Errors - $ERRORS, Warnings - $WARNINGS"
+          echo "Detailed results saved to linting-results.json"
           
           if [ $ERRORS -gt 0 ]; then
             echo "Linting errors found. Check the detailed results above."
@@ -116,29 +107,18 @@ jobs:
 
       - name: Save detailed linting results
         uses: actions/upload-artifact@v3
-        if: always()
         with:
           name: detailed-linting-results
           path: linting-results.json
 
-      - name: Check proxy directory contents
-        run: ls -la ${{ inputs.proxy_directory }}
-
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
 
-      - name: Authenticate to GCP
-        id: auth
-        run: |
-          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
-          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
-
       - name: Upload API Proxy Bundle
         id: upload
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
         run: |
+          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+          echo "Access Token acquired for deployment."
           response=$(curl --fail -X POST \
             -H "Content-Type: multipart/form-data" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -146,65 +126,37 @@ jobs:
             "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=$APIGEE_PROXY_NAME" \
             --silent)
 
-          echo "Apigee Response: $response"
-
           revision=$(echo "$response" | jq --raw-output .revision)
+          echo "Uploaded Proxy Revision: $revision"
           echo "apigee-revision=$revision" >> $GITHUB_OUTPUT
 
-      - name: Deploy to Dev Environment and Validate Revision
-        env:
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_ENV: ${{ inputs.dev_env }}
-          APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
+      - name: Deploy and Validate in Dev Environment
         run: |
+          echo "Deploying to Development Environment: ${{ inputs.dev_env }}"
           curl -X POST \
-          -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
+          -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
 
-          echo "Waiting for deployment to complete..."
-          sleep 60
-
-          max_retries=5
-          retry_count=0
-          while [ $retry_count -lt $max_retries ]; do
-            VALIDATION_OUTPUT=$(curl -s -X GET \
-              -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
+          # Check deployment status until successful
+          echo "Validating Deployment..."
+          sleep 30
+          retries=0
+          while [[ $retries -lt 5 ]]; do
+            state=$(curl -s -X GET \
+              -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments" \
+              | jq -r '.state')
             
-            echo "Validation Output: $VALIDATION_OUTPUT"
-            
-            if echo "$VALIDATION_OUTPUT" | jq -e '.state == "READY"' > /dev/null; then
-              echo "Deployment validated successfully!"
-              exit 0
-            elif echo "$VALIDATION_OUTPUT" | jq -e '.state == "PROGRESSING"' > /dev/null; then
-              echo "Deployment still in progress. Retrying..."
-              sleep 30
-              retry_count=$((retry_count+1))
-            else
-              echo "Deployment failed or in unexpected state!"
-              exit 1
+            if [ "$state" == "READY" ]; then
+              echo "Deployment successful and validated!"
+              break
             fi
+
+            sleep 30
+            retries=$((retries+1))
           done
 
-          echo "Deployment validation failed after $max_retries retries!"
-          exit 1
-
-      - name: Validate Deployment State in Dev Environment
-        env:
-          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
-          APIGEE_DEV_ENV: ${{ inputs.dev_env }}
-          APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
-        run: |
-          VALIDATION_OUTPUT=$(curl -s -X GET \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments")
-
-          echo "Validation Output: $VALIDATION_OUTPUT"
-
-          if echo "$VALIDATION_OUTPUT" | grep -q '"state": "READY"'; then
-            echo "Deployment state validated successfully!"
-          else
+          if [ "$state" != "READY" ]; then
             echo "Deployment validation failed!"
             exit 1
           fi
@@ -212,23 +164,15 @@ jobs:
       - name: Generate Deployment Summary
         run: |
           echo "Generating deployment summary..."
-
-          # Linting summary
           LINT_ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
           LINT_WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
+          echo "Linting Errors: $LINT_ERRORS"
+          echo "Linting Warnings: $LINT_WARNINGS"
 
-          # Deployment summary
-          DEPLOYMENT_STATE=$(curl -s -X GET \
-            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments" | jq -r '.state')
-
-          # Generate table
-          echo "| Step                | Result       | Details |"
-          echo "|---------------------|--------------|---------|"
-          echo "| Linting Errors      | $LINT_ERRORS |         |"
-          echo "| Linting Warnings    | $LINT_WARNINGS |       |"
-          echo "| Deployment State    | $VALIDATION_OUTPUT |     |"
+          echo "| Step                | Result           | Details |"
+          echo "|---------------------|------------------|---------|"
+          echo "| Linting Analysis    | Errors: $LINT_ERRORS |         |"
+          echo "| Linting Analysis    | Warnings: $LINT_WARNINGS |       |"
+          echo "| Proxy Deployment    | $state         |   Validated |"
 
           echo "Deployment summary generated."
-
-      
