@@ -124,6 +124,7 @@ jobs:
             echo "Linting errors found. Check the detailed results above."
             exit 1
           fi
+
       - name: Save detailed linting results
         uses: actions/upload-artifact@v3
         with:
@@ -145,6 +146,7 @@ jobs:
           echo "$deployments" | jq -r '. | "\(.proxy) | \(.revision)"' | while IFS= read -r line; do
             echo "| $line |"
           done
+
       - name: Delete Older Revisions (Keep Last 3)
         run: |
           echo "Deleting older revisions, keeping the last 3..."
@@ -157,8 +159,8 @@ jobs:
 
           # Fetch all revisions of the API proxy
           revisions=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
-          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" \
-          | jq -r '.revisions[]' | sort -n)
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" \
+            | jq -r '.revision[]' | sort -n)
 
           revision_count=$(echo "$revisions" | wc -l)
 
@@ -167,8 +169,8 @@ jobs:
           else
             # Get the current deployed revision
             current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
-            jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
+              jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
 
             # Ensure the current revision is included in the last 3 revisions to keep
             revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "$current_revision")
@@ -204,7 +206,10 @@ jobs:
           echo "|-----------------|-------------------|"
           echo "| $revision_count | $deleted_count    |"
 
-     
+      - name: Create API bundle
+        run: zip -r proxy.zip ${{ inputs.proxy_directory }}
+
+
       - name: Upload API Proxy Bundle
         id: upload
         run: |
