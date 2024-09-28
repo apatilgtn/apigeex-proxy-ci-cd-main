@@ -230,3 +230,44 @@ jobs:
           echo "| Deployment State    | $DEPLOYMENT_STATE |     |"
 
           echo "Deployment summary generated."
+
+      - name: Generate Comprehensive Summary
+        if: always()
+        env:
+          APIGEE_ORG: ${{ secrets.APIGEE_ORG }}
+          APIGEE_DEV_ENV: ${{ inputs.dev_env }}
+          APIGEE_PROXY_NAME: ${{ inputs.proxy_name }}
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          echo "Generating comprehensive summary..."
+
+          # API Upload Summary
+          UPLOAD_REVISION=$(cat $GITHUB_OUTPUT | grep apigee-revision | cut -d'=' -f2)
+          UPLOAD_STATUS=$(if [ ! -z "$UPLOAD_REVISION" ]; then echo "Success"; else echo "Failed"; fi)
+
+          # Linting Summary
+          LINT_ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
+          LINT_WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
+          LINT_STATUS=$(if [ "$LINT_ERRORS" -eq "0" ]; then echo "Passed"; else echo "Failed"; fi)
+
+          # Deployment Summary
+          DEPLOYMENT_STATE=$(curl -s -X GET \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/$UPLOAD_REVISION/deployments" | jq -r '.state')
+          DEPLOYMENT_STATUS=$(if [ "$DEPLOYMENT_STATE" == "READY" ]; then echo "Success"; else echo "Failed"; fi)
+
+          # Generate table
+          echo "| Step                | Status       | Details                    |"
+          echo "|---------------------|--------------|----------------------------|"
+          echo "| API Upload          | $UPLOAD_STATUS | Revision: $UPLOAD_REVISION |"
+          echo "| Linting             | $LINT_STATUS | Errors: $LINT_ERRORS, Warnings: $LINT_WARNINGS |"
+          echo "| Deployment          | $DEPLOYMENT_STATUS | State: $DEPLOYMENT_STATE |"
+
+          echo "Comprehensive summary generated."
+
+      - name: Upload Summary as Artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-summary
+          path: ${{ github.workspace }}/deployment-summary.md
