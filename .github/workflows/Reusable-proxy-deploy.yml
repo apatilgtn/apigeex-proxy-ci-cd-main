@@ -92,20 +92,35 @@ jobs:
 
       - name: Run apigeelint
         run: |
-          apigeelint -s ./apiproxy -f table > linting-results.txt
-          cat linting-results.txt
-          if grep -q "Severity: Error" linting-results.txt; then
-            echo "Linting errors found. Check the results above."
+          echo "Starting apigeelint analysis..."
+          echo "Analyzing proxy in directory: ${{ inputs.proxy_directory }}"
+          apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10 > linting-results.json
+          echo "Apigeelint analysis complete. Results saved to linting-results.json"
+          
+          # Display detailed linting results
+          echo "Detailed Linting Results:"
+          jq -r '.[] | "Rule: \(.ruleId)\nSeverity: \(.severity)\nMessage: \(.message)\nFile: \(.filePath)\nLine: \(.lineNumber)\n"' linting-results.json
+          
+          # Count errors and warnings
+          ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
+          WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
+          
+          echo "Summary of results:"
+          echo "Errors: $ERRORS"
+          echo "Warnings: $WARNINGS"
+          
+          if [ $ERRORS -gt 0 ]; then
+            echo "Linting errors found. Check the detailed results above."
             exit 1
           fi
 
-      - name: Save linting results
+      - name: Save detailed linting results
         uses: actions/upload-artifact@v3
         if: always()
         with:
-          name: linting-results
-          path: linting-results.txt
-      
+          name: detailed-linting-results
+          path: linting-results.json
+
       - name: Check proxy directory contents
         run: ls -la ${{ inputs.proxy_directory }}
 
