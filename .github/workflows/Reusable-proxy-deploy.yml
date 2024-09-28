@@ -71,6 +71,20 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Run apigeelint
+        run: apigeelint -s ${{ inputs.proxy_directory }} -f table || exit 1
+
+      - name: Run apigeelint
+        run: apigeelint -s ${{ inputs.proxy_directory }} -f table
+
       - name: Check proxy directory contents
         run: ls -la ${{ inputs.proxy-directory }}
 
