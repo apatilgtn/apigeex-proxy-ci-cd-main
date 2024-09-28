@@ -123,7 +123,6 @@ jobs:
           if [ $ERRORS -gt 0 ]; then
             echo "Linting errors found. Check the detailed results above."
             exit 1
-          fi  
 
       - name: Save detailed linting results
         uses: actions/upload-artifact@v3
@@ -149,7 +148,7 @@ jobs:
 
       - name: Delete Older Revisions (Keep Last 3)
         run: |
-          echo "Starting deletion of older revisions, keeping the last 3..."
+          echo "Starting deletion of older revisions for proxy: $APIGEE_PROXY_NAME (Keeping last 3)"
 
           # Install jq if not already installed
           sudo apt-get install -y jq
@@ -157,84 +156,38 @@ jobs:
           # Authenticate and get access token
           ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
 
-          # Fetch all revisions of the API proxy
-          echo "Fetching revisions for proxy: $APIGEE_PROXY_NAME"
-          raw_revisions_response=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions")
+          # Fetch all revisions and sort numerically
+          revisions=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" | \
+            jq -r '.[]' | sort -n)
 
-          echo "Raw revisions response: $raw_revisions_response"
-
-          # Use jq to directly extract the array of revisions
-          revisions=$(echo "$raw_revisions_response" | jq -r '.[]' | sort -n)
-          
-          # Debug output to check extracted revisions
-          echo "Extracted revisions: $revisions"
-          if [ -z "$revisions" ]; then
-            echo "Error: Could not extract revisions. Please check the JSON structure."
-            exit 1
-          fi
-
+          # Exit early if there are 3 or fewer revisions
           revision_count=$(echo "$revisions" | wc -l)
-          echo "Total revisions found: $revision_count"
-          echo "Revisions: $revisions"
+          [ "$revision_count" -le 3 ] && echo "Only $revision_count revisions found. No need to delete any." && exit 0
 
-          # Exit if we have less than or equal to 3 revisions
-          if [ "$revision_count" -le 3 ]; then
-            echo "Only $revision_count revisions found. No need to delete any revisions."
-            exit 0
-          fi
-
-          # Fetch current deployments to find the active revision for this proxy
-          echo "Fetching current deployments for environment: $APIGEE_DEV_ENV"
-          raw_deployment_response=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments")
-
-          echo "Raw deployment response: $raw_deployment_response"
-
-          # Extract the current deployed revision
-          current_revision=$(echo "$raw_deployment_response" | \
+          # Get the currently deployed revision in the environment
+          current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
             jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
 
-          if [ -z "$current_revision" ]; then
-            echo "Error: Could not find the current deployed revision for proxy $APIGEE_PROXY_NAME."
-            echo "Parsed deployment JSON structure:"
-            echo "$raw_deployment_response" | jq .
-            exit 1
-          fi
-
-          echo "Current deployed revision: $current_revision"
-
-          # Determine the last 3 revisions to keep, ensuring the current revision is preserved
-          revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "$current_revision")
-          if [ -n "$revisions_to_keep" ]; then
-            revisions_to_keep=$(echo "$revisions_to_keep"$'\n'"$current_revision" | sort -n | uniq)
-          else
-            revisions_to_keep="$current_revision"
-          fi
+          # Ensure current revision is included in the last 3 revisions
+          revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "^$current_revision$" || true)
+          revisions_to_keep="$revisions_to_keep"$'\n'"$current_revision"  # Include current revision
+          revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
 
           echo "Revisions to keep: $revisions_to_keep"
-
-          # Calculate revisions to delete by excluding the kept ones
-          revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
           echo "Revisions to delete: $revisions_to_delete"
 
-          # Loop through the revisions to delete them
-          deleted_count=0
+          # Delete older revisions
           for rev in $revisions_to_delete; do
-            echo "Deleting revision $rev of proxy $APIGEE_PROXY_NAME"
-            delete_response=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
+            echo "Deleting revision $rev..."
+            response_code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
               "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions/$rev")
 
-            if [ "$delete_response" -eq 200 ]; then
-              echo "Revision $rev deleted successfully."
-              deleted_count=$((deleted_count + 1))
-            else
-              echo "Failed to delete revision $rev. HTTP status code: $delete_response"
-            fi
+            [ "$response_code" -eq 200 ] && echo "Revision $rev deleted successfully." || echo "Failed to delete revision $rev. Status: $response_code"
           done
 
           echo "Older revisions cleanup completed."
-          echo "Deleted $deleted_count out of $((revision_count - 3)) old revisions."
 
 
 
