@@ -6,33 +6,33 @@ on:
       proxy_name:
         description: The name of the API proxy to deploy
         required: true
-        type: 'string'
+        type: string
       proxy_directory:
         description: Working directory to zip up as your proxy bundle
         required: false
-        type: 'string'
+        type: string
         default: 'apiproxy'
       dev_env:
         description: The name of the development environment
         required: true
-        type: 'string'
+        type: string
       test_env:
         description: The name of the testing environment
         required: true
-        type: 'string'
+        type: string
       uat_env:
         description: The name of the UAT environment
         required: true
-        type: 'string'
+        type: string
       runner:
         description: The runner to use for the job
         required: false
         default: 'ubuntu-latest'
-        type: 'string'
+        type: string
       repository:
         description: 'The repository to checkout'
         required: false
-        type: 'string'
+        type: string
         default: ${{ github.repository }}
     secrets:
       apigee_org:
@@ -208,6 +208,7 @@ jobs:
             echo "Deployment validation failed!"
             exit 1
           fi
+
       - name: Generate Deployment Summary
         run: |
           echo "Generating deployment summary..."
@@ -218,8 +219,8 @@ jobs:
 
           # Deployment summary
           DEPLOYMENT_STATE=$(curl -s -X GET \
-        -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
-        "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments" | jq -r '.state')
+            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments" | jq -r '.state')
 
           # Generate table
           echo "| Step                | Result       | Details |"
