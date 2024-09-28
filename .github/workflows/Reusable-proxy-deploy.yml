@@ -75,7 +75,7 @@ jobs:
         run: ls -la ${{ inputs.proxy-directory }}
 
       - name: Create API bundle
-        run: zip -r proxy.zip ${{ inputs.proxy-directory }}
+        run: zip -r proxy.zip ${{ inputs.proxy_directory }}
 
       - name: Authenticate to GCP
         id: auth
