@@ -273,6 +273,7 @@ jobs:
             echo "Deployment validation failed!"
             echo "deployment-state=FAILED" >> $GITHUB_OUTPUT
             exit 1
+          fi  
 
       - name: Generate Deployment Summary
         run: |
