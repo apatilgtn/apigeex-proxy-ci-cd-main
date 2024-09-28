@@ -7,7 +7,7 @@ on:
         description: The name of the API proxy to deploy
         required: true
         type: 'string'
-      proxy-directory:
+      proxy_directory:
         description: Working directory to zip up as your proxy bundle
         required: false
         type: 'string'
