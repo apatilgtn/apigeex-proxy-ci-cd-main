@@ -71,6 +71,9 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      - name: Check proxy directory contents
+        run: ls -la ${{ inputs.proxy-directory }}
+
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy-directory }}
 
