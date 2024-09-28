@@ -71,22 +71,43 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-     - name: Install Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '14'
+          node-version: '16'
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-node-
 
       - name: Install jq
         run: sudo apt-get install -y jq
 
       - name: Install apigeelint
-        run: npm install -g apigeelint
+        run: npm install -g apigeelint@2.16.0
 
       - name: Run apigeelint
-        run: apigeelint -s ${{ inputs.proxy_directory }} -f table || exit 1
-        
+        run: |
+          apigeelint -s ./apiproxy -f table > linting-results.txt
+          cat linting-results.txt
+          if grep -q "Severity: Error" linting-results.txt; then
+            echo "Linting errors found. Check the results above."
+            exit 1
+          fi
+
+      - name: Save linting results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: linting-results
+          path: linting-results.txt
+      
       - name: Check proxy directory contents
-        run: ls -la ${{ inputs.proxy-directory }}
+        run: ls -la ${{ inputs.proxy_directory }}
 
       - name: Create API bundle
         run: zip -r proxy.zip ${{ inputs.proxy_directory }}
