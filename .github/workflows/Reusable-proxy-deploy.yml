@@ -101,45 +101,24 @@ jobs:
       - name: Install apigeelint
         run: npm install -g apigeelint@2.16.0
 
-      # Step 8: Run apigeelint and process results
+     # Step 8: Run apigeelint and process results
       - name: Run apigeelint
         run: |
           echo "Starting apigeelint analysis..."
-          apigeelint -s ${{ inputs.proxy_directory }} -f json.js --maxWarnings 10 > linting-results.json
+          apigeelint -s ${{ inputs.proxy_directory }} -f stylish.js -e all --maxWarnings 10 > linting-results.json
 
           # Count errors and warnings
           ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
           WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
 
-          # Format error and warning details
-          ERROR_DETAILS=$(jq -r '[.[] | select(.severity == "Error") | {file, name, message}] | (["File", "Error", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
-          WARNING_DETAILS=$(jq -r '[.[] | select(.severity == "Warning") | {file, name, message}] | (["File", "Warning", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
-
-          # Output linting summary and details
+          # Output linting summary
           echo "Linting Complete: Errors - $ERRORS, Warnings - $WARNINGS"
           echo "Detailed results saved to linting-results.json"
 
-          echo -e "\n\n## Linting Summary"
-          echo -e "| Severity   | Count |"
-          echo -e "|------------|-------|"
-          echo -e "| Errors     | $ERRORS |"
-          echo -e "| Warnings   | $WARNINGS |"
-
-          echo -e "\n### Error Details:"
-          echo -e "| File       | Error | Message |"
-          echo -e "|------------|-------|---------|"
-          echo -e "$ERROR_DETAILS" | column -t -s $'\t'
-
-          echo -e "\n### Warning Details:"
-          echo -e "| File       | Warning | Message |"
-          echo -e "|------------|---------|---------|"
-          echo -e "$WARNING_DETAILS" | column -t -s $'\t'
-
           # Exit with error if there are linting errors
           if [ $ERRORS -gt 0 ]; then
-            echo "Linting errors found. Check the detailed results above."
+            echo "Linting errors found. Check the detailed results in linting-results.json."
             exit 1
-          fi
 
       # Step 9: Save detailed linting results as an artifact
       - name: Save detailed linting results
