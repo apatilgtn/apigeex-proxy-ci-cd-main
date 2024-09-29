@@ -101,20 +101,7 @@ jobs:
       - name: Install apigeelint
         run: npm install -g apigeelint@2.16.0
 
-     # Step 8: Check for the presence of required files
-      - name: Check for required files
-        run: |
-          echo "Checking for required files..."
-          REQUIRED_FILES=("file1.txt" "file2.txt" "file3.txt")
-          for file in "${REQUIRED_FILES[@]}"; do
-            if [ ! -f "${{ inputs.proxy_directory }}/$file" ]; then
-              echo "Error: $file is missing in the directory ${{ inputs.proxy_directory }}"
-              exit 1
-            fi
-          done
-          echo "All required files are present."
-
-      # Step 9.1: Run apigeelint and save results
+      # Step 8: Run apigeelint and save results
       - name: Run apigeelint
         run: |
           apigeelint -s ${{ inputs.proxy_directory }} -f json -o linting-results.json
