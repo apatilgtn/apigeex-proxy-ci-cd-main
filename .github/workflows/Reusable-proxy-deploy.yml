@@ -112,8 +112,8 @@ jobs:
           WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
 
           # Format error and warning details
-          ERROR_DETAILS=$(jq -r '[.[] | select(.severity == "Error") | {name, message, file}] | (["File", "Error", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
-          WARNING_DETAILS=$(jq -r '[.[] | select(.severity == "Warning") | {name, message, file}] | (["File", "Warning", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
+          ERROR_DETAILS=$(jq -r '[.[] | select(.severity == "Error") | {file, name, message}] | (["File", "Error", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
+          WARNING_DETAILS=$(jq -r '[.[] | select(.severity == "Warning") | {file, name, message}] | (["File", "Warning", "Message"] | (., map(length * "-"))) + map([.file, .name, .message]) | @tsv' linting-results.json)
 
           # Output linting summary and details
           echo "Linting Complete: Errors - $ERRORS, Warnings - $WARNINGS"
@@ -128,18 +128,18 @@ jobs:
           echo -e "\n### Error Details:"
           echo -e "| File       | Error | Message |"
           echo -e "|------------|-------|---------|"
-          echo -e "$ERROR_DETAILS"
+          echo -e "$ERROR_DETAILS" | column -t -s $'\t'
 
           echo -e "\n### Warning Details:"
           echo -e "| File       | Warning | Message |"
           echo -e "|------------|---------|---------|"
-          echo -e "$WARNING_DETAILS"
+          echo -e "$WARNING_DETAILS" | column -t -s $'\t'
 
           # Exit with error if there are linting errors
           if [ $ERRORS -gt 0 ]; then
             echo "Linting errors found. Check the detailed results above."
             exit 1
-          fi  
+          fi
 
       # Step 9: Save detailed linting results as an artifact
       - name: Save detailed linting results
