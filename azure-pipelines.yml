@@ -1,0 +1,212 @@
+# Azure Pipeline for Apigee Proxy Deployment
+
+# Pipeline parameters
+parameters:
+- name: proxyName
+  type: string
+- name: proxyDirectory
+  type: string
+  default: 'apiproxy'
+- name: devEnv
+  type: string
+- name: testEnv
+  type: string
+- name: uatEnv
+  type: string
+
+# Variables
+variables:
+- group: apigee-secrets # Assuming you've set up a variable group for secrets
+
+trigger:
+  - main # or your preferred branch
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Deploy_Apigee_Proxy
+  jobs:
+  - job: DeployAPI
+    steps:
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "##vso[task.setvariable variable=APIGEE_ORG]$(apigee-org)"
+          echo "##vso[task.setvariable variable=APIGEE_PROXY_NAME]${{ parameters.proxyName }}"
+          echo "##vso[task.setvariable variable=APIGEE_DEV_ENV]${{ parameters.devEnv }}"
+          echo "##vso[task.setvariable variable=APIGEE_TEST_ENV]${{ parameters.testEnv }}"
+          echo "##vso[task.setvariable variable=APIGEE_UAT_ENV]${{ parameters.uatEnv }}"
+
+    - task: GoogleCloudSDK@0
+      inputs:
+        version: 'latest'
+        project: '$(APIGEE_ORG)'
+        serviceAccountKey: '$(GOOGLE_APPLICATION_CREDENTIALS)'
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '20.x'
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          npm install -g apigeelint@2.16.0
+          sudo apt-get install -y jq
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          apigeelint -s ${{ parameters.proxyDirectory }} -f json -w linting-results.json
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: 'linting-results.json'
+        artifactName: 'detailed-linting-results'
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Fetching deployed proxies and their revisions..."
+          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+          
+          deployments=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" \
+            | jq -r '.deployments[] | {proxy: .apiProxy, revision: .revision}')
+
+          echo -e "\n## Deployed Proxies and Revisions"
+          echo "| Proxy Name | Revision |"
+          echo "|------------|----------|"
+          echo "$deployments" | jq -r '. | "\(.proxy) | \(.revision)"' | while IFS= read -r line; do
+            echo "| $line |"
+          done
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Starting deletion of older revisions for proxy: $APIGEE_PROXY_NAME (Keeping last 3)"
+
+          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+
+          revisions=$(curl -s -X GET -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions" | \
+            jq -r '.[]' | sort -n)
+
+          revision_count=$(echo "$revisions" | wc -l)
+          [ "$revision_count" -le 3 ] && echo "Only $revision_count revisions found. No need to delete any." && exit 0
+
+          current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
+            jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
+
+          revisions_to_keep=$(echo "$revisions" | tail -n 3 | grep -v "^$current_revision$" || true)
+          revisions_to_keep="$revisions_to_keep"$'\n'"$current_revision"
+          revisions_to_delete=$(echo "$revisions" | grep -v -F "$revisions_to_keep")
+
+          echo -e "\n### Revisions Table\n"
+          echo "| Revision | Status       | Delete Status        |"
+          echo "|----------|--------------|---------------------|"
+
+          for rev in $(echo "$revisions_to_keep" | sort -n); do
+            echo "| $rev      | Retained     | N/A                 |"
+          done
+
+          for rev in $revisions_to_delete; do
+            response_code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis/$APIGEE_PROXY_NAME/revisions/$rev")
+
+            if [ "$response_code" -eq 200 ]; then
+              echo "| $rev      | Deleted      | Successfully deleted |"
+            else
+              echo "| $rev      | Deleted      | Failed with status $response_code |"
+            fi
+          done
+
+          echo -e "\nOlder revisions cleanup completed."
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          zip -r proxy.zip ${{ parameters.proxyDirectory }}
+
+    - task: Bash@3
+      name: UploadProxy
+      inputs:
+        targetType: 'inline'
+        script: |
+          ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+          current_revision=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/deployments" | \
+            jq -r --arg PROXY "$APIGEE_PROXY_NAME" '.deployments[] | select(.apiProxy == $PROXY) | .revision')
+
+          echo "Current deployed revision: $current_revision"
+          echo "##vso[task.setvariable variable=current-revision;isOutput=true]$current_revision"
+
+          response=$(curl --fail -X POST \
+            -H "Content-Type: multipart/form-data" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -F "file=@proxy.zip" \
+            "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/apis?action=import&name=$APIGEE_PROXY_NAME" \
+            --silent)
+
+          revision=$(echo "$response" | jq --raw-output .revision)
+          echo "Uploaded Proxy Revision: $revision"
+          echo "##vso[task.setvariable variable=apigee-revision;isOutput=true]$revision"
+
+    - task: Bash@3
+      name: DeployAndValidate
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "Deploying to Development Environment: ${{ parameters.devEnv }}"
+          curl -X POST \
+          -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
+          "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/$(UploadProxy.apigee-revision)/deployments?override=true"
+
+          sleep 30
+          retries=0
+          while [[ $retries -lt 5 ]]; do
+            state=$(curl -s -X GET \
+              -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
+              "https://apigee.googleapis.com/v1/organizations/$APIGEE_ORG/environments/$APIGEE_DEV_ENV/apis/$APIGEE_PROXY_NAME/revisions/$(UploadProxy.apigee-revision)/deployments" \
+              | jq -r '.state')
+
+            if [ "$state" == "READY" ]; then
+              echo "Deployment successful and validated!"
+              echo "##vso[task.setvariable variable=deployment-state;isOutput=true]$state"
+              break
+            fi
+
+            sleep 30
+            retries=$((retries+1))
+          done
+
+          if [ "$state" != "READY" ]; then
+            echo "Deployment validation failed!"
+            echo "##vso[task.setvariable variable=deployment-state;isOutput=true]FAILED"
+            exit 1
+          fi
+
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: |
+          LINT_ERRORS=$(jq '[.[] | select(.severity == "Error")] | length' linting-results.json)
+          LINT_WARNINGS=$(jq '[.[] | select(.severity == "Warning")] | length' linting-results.json)
+
+          echo "| Step                | Result           | Details |"
+          echo "|---------------------|------------------|---------|"
+          echo "| Linting Analysis    | Errors: $LINT_ERRORS |         |"
+          echo "| Linting Analysis    | Warnings: $LINT_WARNINGS |       |"
+          echo "| Proxy Deployment    | $(DeployAndValidate.deployment-state) | Validated |"
+
+          echo -e "\n## Deployment Version Information"
+          echo "| Proxy Name | Old Version | New Version | Status |"
+          echo "|------------|-------------|-------------|--------|"
+          echo "| ${{ parameters.proxyName }} | $(UploadProxy.current-revision) | $(UploadProxy.apigee-revision) | $(DeployAndValidate.deployment-state) |"
